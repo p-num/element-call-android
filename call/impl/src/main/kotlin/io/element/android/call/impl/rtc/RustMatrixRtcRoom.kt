@@ -46,7 +46,11 @@ internal class RustMatrixRtcRoom(
     private var call: RustMatrixRtcCall? = null
     private var isShutdown = false
 
-    override suspend fun joinCall(kind: MatrixRtcCallKind, applicationSlotId: String?): Result<MatrixRtcCall> = runCatchingExceptions {
+    override suspend fun joinCall(
+        kind: MatrixRtcCallKind,
+        applicationSlotId: String?,
+        callIntent: MatrixRtcCallIntent?,
+    ): Result<MatrixRtcCall> = runCatchingExceptions {
         mutex.withLock {
             check(!isShutdown) { "Room $roomId is shut down" }
             val rtcCall = withContext(ffiDispatcher) {
@@ -61,6 +65,7 @@ internal class RustMatrixRtcRoom(
                         degradedLifetimeMs = null,
                         encryptionConfig = null,
                         kind = kind.toFfi(),
+                        callIntent = callIntent?.toWire(),
                         reactions = null,
                     )
                 )

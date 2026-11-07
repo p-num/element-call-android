@@ -105,7 +105,8 @@ class SampleElementCallController(
         _state.value = ElementCallSnapshot(callData = callData, connection = ElementCallConnection.RequestingPermission)
     }
 
-    override fun setMicrophonePermissionGranted(granted: Boolean) = update {
+    override fun setMicrophonePermissionGranted(granted: Boolean, expectedCall: ElementCallData?) = update {
+        if (expectedCall != null && it.callData !== expectedCall) return@update it
         it.copy(
             isMicrophonePermissionGranted = granted,
             connection = when {
@@ -116,7 +117,8 @@ class SampleElementCallController(
         )
     }
 
-    override fun setCameraPermissionGranted(granted: Boolean) {
+    override fun setCameraPermissionGranted(granted: Boolean, expectedCall: ElementCallData?) {
+        if (expectedCall != null && _state.value?.callData !== expectedCall) return
         update { it.copy(isCameraPermissionGranted = granted) }
         if (granted) setCameraEnabled(true)
     }
@@ -248,6 +250,12 @@ class SampleElementCallController(
 
     /** The fixtures script the homeserver's reach themselves. */
     override fun reportConnectivity(isOnline: Boolean) = Unit
+
+    override suspend fun hangUpAndWait(expectedCall: ElementCallData): Boolean {
+        if (_state.value?.callData !== expectedCall) return false
+        hangUp()
+        return true
+    }
 
     override fun hangUp() {
         _state.value = null

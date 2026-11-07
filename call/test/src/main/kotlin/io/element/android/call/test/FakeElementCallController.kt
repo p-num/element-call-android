@@ -48,6 +48,7 @@ class FakeElementCallController(
 
     val startedCalls = mutableListOf<ElementCallData>()
     val microphonePermissionAnswers = mutableListOf<Boolean>()
+    val microphonePermissionOwners = mutableListOf<ElementCallData?>()
     val cameraPermissionAnswers = mutableListOf<Boolean>()
     val microphoneMutedCalls = mutableListOf<Boolean>()
     val cameraEnabledCalls = mutableListOf<Boolean>()
@@ -94,11 +95,12 @@ class FakeElementCallController(
         startedCalls += callData
     }
 
-    override fun setMicrophonePermissionGranted(granted: Boolean) {
+    override fun setMicrophonePermissionGranted(granted: Boolean, expectedCall: ElementCallData?) {
         microphonePermissionAnswers += granted
+        microphonePermissionOwners += expectedCall
     }
 
-    override fun setCameraPermissionGranted(granted: Boolean) {
+    override fun setCameraPermissionGranted(granted: Boolean, expectedCall: ElementCallData?) {
         cameraPermissionAnswers += granted
     }
 
@@ -207,6 +209,10 @@ class FakeElementCallController(
     override fun reportConnectivity(isOnline: Boolean) {
         connectivityReports += isOnline
     }
+
+    var hangUpAndWaitResult: suspend (ElementCallData) -> Boolean = { false }
+
+    override suspend fun hangUpAndWait(expectedCall: ElementCallData): Boolean = hangUpAndWaitResult(expectedCall)
 
     override fun hangUp() {
         hangUpCount++

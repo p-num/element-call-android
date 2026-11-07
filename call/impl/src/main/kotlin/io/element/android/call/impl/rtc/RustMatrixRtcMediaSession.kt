@@ -80,6 +80,9 @@ internal class RustMatrixRtcMediaSession(
      */
     private val dispatchers: ElementCallDispatchers,
 ) : MatrixRtcMediaSession {
+    private val _isOwnMediaDegraded = MutableStateFlow(false)
+    override val isOwnMediaDegraded: StateFlow<Boolean> = _isOwnMediaDegraded
+
     private val _events = MutableSharedFlow<MatrixRtcCallEvent>(extraBufferCapacity = 32)
     override val events: SharedFlow<MatrixRtcCallEvent> = _events
 
@@ -363,6 +366,7 @@ internal class RustMatrixRtcMediaSession(
                     ?: break
 
                 val mapped = event.map()
+                if (mapped is MatrixRtcCallEvent.OwnMediaConnectionState) _isOwnMediaDegraded.value = mapped.degraded
                 handleInternally(mapped)
                 _events.emit(mapped)
             }

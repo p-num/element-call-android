@@ -58,6 +58,7 @@ import org.matrix.rtc.FfiUnableToDecrypt
 import org.matrix.rtc.JoinedMembership
 
 internal fun FfiCallEvent.map(): MatrixRtcCallEvent = when (this) {
+    is FfiCallEvent.OwnMediaConnectionState -> MatrixRtcCallEvent.OwnMediaConnectionState(degraded)
     is FfiCallEvent.ParticipantJoined -> MatrixRtcCallEvent.ParticipantJoined(memberId, UserId(userId), participantCount.toInt())
     is FfiCallEvent.ParticipantLeft -> MatrixRtcCallEvent.ParticipantLeft(memberId, participantCount.toInt())
     is FfiCallEvent.StreamStarted -> MatrixRtcCallEvent.StreamStarted(memberId, kind.map())

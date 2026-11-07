@@ -17,6 +17,7 @@
 * [Publishing to Maven Central](#publishing-to-maven-central)
 * [What must never be published](#what-must-never-be-published)
 * [Repository setup](#repository-setup)
+* [Letro local validation](#letro-local-validation)
 
 <!--- END -->
 
@@ -143,7 +144,7 @@ problem with the changelog *text*, fix it on `main` in a follow-up; the tag stay
 ### 6. Check it
 
 ```bash
-git ls-remote --tags https://github.com/element-hq/element-call-android | grep v<version>
+git ls-remote --tags https://github.com/p-num/element-call-android | grep v<version>
 gh release view v<version>
 ```
 

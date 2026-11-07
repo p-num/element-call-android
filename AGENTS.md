@@ -21,6 +21,7 @@
 * [Releasing](#releasing)
 * [Pull requests](#pull-requests)
 * [Keep this file current](#keep-this-file-current)
+* [Letro CI policy](#letro-ci-policy)
 
 <!--- END -->
 

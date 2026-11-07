@@ -71,6 +71,8 @@ import io.element.android.call.tests.testutils.WarmUpRule
 import io.element.android.call.tests.testutils.consumeItemsUntilPredicate
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.TestScope
@@ -2176,6 +2178,207 @@ class DefaultElementCallControllerTest {
 
         assertThat(developer.state.value?.isTileStatsVisible).isTrue()
         assertThat(user.state.value?.isTileStatsVisible).isFalse()
+    }
+
+    @Test
+    fun `every call publishes its media intent including quiet Direct and group joins`() = runTest {
+        for (isDm in listOf(false, true)) {
+            for (starts in listOf(false, true)) {
+                for (audio in listOf(false, true)) {
+                    val rtc = FakeMatrixRtcClient()
+                    val controller = createController(rtcClient = rtc, roomIsDm = isDm, isStartingCall = starts, isAudioCall = audio)
+                    controller.setMicrophonePermissionGranted(true)
+                    runCurrent()
+                    assertThat(rtc.lastRoom?.lastCallIntent).isEqualTo(if (audio) MatrixRtcCallIntent.AUDIO else MatrixRtcCallIntent.VIDEO)
+                    if (!starts) {
+                        assertThat(rtc.lastRoom?.lastKind).isEqualTo(
+                            if (isDm) MatrixRtcCallKind.Direct(ring = null) else MatrixRtcCallKind.Group(notify = null)
+                        )
+                    }
+                    controller.hangUp()
+                    runCurrent()
+                }
+            }
+        }
+    }
+
+    @Test
+    fun `confirmed departure waits for the membership leave rather than the screen closing`() = runTest {
+        val rtc = FakeMatrixRtcClient()
+        val controller = createController(rtcClient = rtc)
+        controller.setMicrophonePermissionGranted(true)
+        runCurrent()
+        val attempt = requireNotNull(controller.state.value).callData
+        val acknowledgement = CompletableDeferred<Result<Unit>>()
+        rtc.lastCall!!.leaveResult = { acknowledgement.await() }
+        val leaving = async { controller.hangUpAndWait(attempt) }
+        runCurrent()
+        assertThat(controller.state.value).isNull()
+        assertThat(leaving.isCompleted).isFalse()
+        acknowledgement.complete(Result.success(Unit))
+        assertThat(leaving.await()).isTrue()
+        assertThat(rtc.lastRoom?.shutdownCount).isEqualTo(1)
+    }
+
+    @Test
+    fun `failed membership leave cannot confirm departure`() = runTest {
+        val rtc = FakeMatrixRtcClient()
+        val controller = createController(rtcClient = rtc)
+        controller.setMicrophonePermissionGranted(true)
+        runCurrent()
+        val attempt = requireNotNull(controller.state.value).callData
+        rtc.lastCall!!.leaveResult = { Result.failure(IllegalStateException("offline")) }
+        assertThat(controller.hangUpAndWait(attempt)).isFalse()
+        assertThat(rtc.lastRoom?.shutdownCount).isEqualTo(1)
+        assertThat(controller.state.value).isNull()
+    }
+
+    @Test
+    fun `a stale departure request cannot hang up an equal call in the same room`() = runTest {
+        val rtc = FakeMatrixRtcClient()
+        val controller = createController(rtcClient = rtc)
+        controller.setMicrophonePermissionGranted(true)
+        runCurrent()
+        val attempt = requireNotNull(controller.state.value).callData
+        assertThat(controller.hangUpAndWait(attempt.copy())).isFalse()
+        assertThat(controller.state.value?.callData).isSameInstanceAs(attempt)
+        assertThat(rtc.lastCall?.leaveCount).isEqualTo(0)
+        assertThat(controller.hangUpAndWait(attempt)).isTrue()
+    }
+
+    @Test
+    fun `cancelling the departure waiter does not interrupt membership cleanup`() = runTest {
+        val rtc = FakeMatrixRtcClient()
+        val listener = FakeElementCallLifecycleListener()
+        val controller = createController(rtcClient = rtc, lifecycleListener = listener)
+        controller.setMicrophonePermissionGranted(true)
+        runCurrent()
+        val attempt = requireNotNull(controller.state.value).callData
+        val acknowledgement = CompletableDeferred<Result<Unit>>()
+        rtc.lastCall!!.leaveResult = { acknowledgement.await() }
+        val leaving = async { controller.hangUpAndWait(attempt) }
+        runCurrent()
+        leaving.cancelAndJoin()
+        acknowledgement.complete(Result.success(Unit))
+        runCurrent()
+        assertThat(listener.endedCalls).containsExactly(attempt)
+        assertThat(rtc.lastRoom?.shutdownCount).isEqualTo(1)
+    }
+
+    @Test
+    fun `failed room teardown cannot leave the host claiming the user is still in the call`() = runTest {
+        val rtc = FakeMatrixRtcClient()
+        val listener = FakeElementCallLifecycleListener()
+        val controller = createController(rtcClient = rtc, lifecycleListener = listener)
+        controller.setMicrophonePermissionGranted(true)
+        runCurrent()
+        val attempt = requireNotNull(controller.state.value).callData
+        rtc.lastRoom!!.shutdownResult = { error("room shutdown failed") }
+        assertThat(controller.hangUpAndWait(attempt)).isFalse()
+        assertThat(controller.state.value).isNull()
+        assertThat(listener.endedCalls).containsExactly(attempt)
+    }
+
+    @Test
+    fun `a late camera grant after hangup cannot restart the foreground service`() = runTest {
+        val platform = FakeElementCallPlatform()
+        val controller = createController(platform = platform)
+        controller.hangUp()
+        runCurrent()
+        val previous = platform.startForegroundServiceCount
+        controller.setCameraPermissionGranted(true)
+        runCurrent()
+        assertThat(platform.startForegroundServiceCount).isEqualTo(previous)
+        assertThat(controller.state.value).isNull()
+    }
+
+    @Test
+    fun `permission answers from an old equal call cannot deny microphone or enable camera in its replacement`() = runTest {
+        val rtc = FakeMatrixRtcClient()
+        val controller = createController(rtcClient = rtc)
+        val old = requireNotNull(controller.state.value).callData
+        controller.hangUp()
+        runCurrent()
+        val replacement = old.copy()
+        controller.startCall(replacement)
+        controller.setMicrophonePermissionGranted(true, replacement)
+        runCurrent()
+        val media = requireNotNull(rtc.lastCall?.lastMediaSession)
+        controller.setMicrophonePermissionGranted(false, old)
+        controller.setCameraPermissionGranted(true, old)
+        runCurrent()
+        assertThat(controller.state.value?.callData).isSameInstanceAs(replacement)
+        assertThat(controller.state.value?.connection).isEqualTo(ElementCallConnection.Connected)
+        assertThat(media.cameraEnabledCalls).doesNotContain(true)
+    }
+
+    @Test
+    fun `own media outage clears connection even while the core remains connected`() = runTest {
+        val rtc = FakeMatrixRtcClient()
+        val controller = createController(rtcClient = rtc)
+        controller.setMicrophonePermissionGranted(true)
+        runCurrent()
+        val session = rtc.lastCall!!.lastMediaSession!!
+        assertThat(controller.state.value!!.isMediaConnected).isTrue()
+        val connectedAt = controller.state.value!!.connectedAtElapsedMs
+
+        session.emit(MatrixRtcCallEvent.OwnMediaConnectionState(degraded = true))
+        runCurrent()
+        assertThat(controller.state.value!!.isMediaConnected).isFalse()
+        assertThat(controller.state.value!!.connection).isEqualTo(ElementCallConnection.ConnectingMedia)
+
+        session.emit(MatrixRtcCallEvent.OwnMediaConnectionState(degraded = false))
+        runCurrent()
+        assertThat(controller.state.value!!.isMediaConnected).isTrue()
+        assertThat(controller.state.value!!.connection).isEqualTo(ElementCallConnection.Connected)
+        assertThat(controller.state.value!!.connectedAtElapsedMs).isEqualTo(connectedAt)
+    }
+
+    @Test
+    fun `a remote outage does not clear this devices publishing connection`() = runTest {
+        val rtc = FakeMatrixRtcClient()
+        val controller = createController(rtcClient = rtc)
+        controller.setMicrophonePermissionGranted(true)
+        runCurrent()
+        rtc.lastCall!!.lastMediaSession!!.interruptions.value = MatrixRtcInterruptions.NONE.copy(membersReconnecting = listOf(A_REMOTE_MEMBER_ID))
+        runCurrent()
+        assertThat(controller.state.value!!.isMediaConnected).isTrue()
+        assertThat(controller.state.value!!.connection).isEqualTo(ElementCallConnection.Connected)
+    }
+
+    @Test
+    fun `membership and a local tile cannot confirm media before microphone publication`() = runTest {
+        val publish = CompletableDeferred<Unit>()
+        val session = FakeMatrixRtcMediaSession().apply {
+            localState.value = MatrixRtcLocalState(aTile(A_LOCAL_MEMBER_ID), isScreenSharing = false)
+            publishMicrophoneResult = {
+                publish.await()
+                Result.success(Unit)
+            }
+        }
+        val call = FakeMatrixRtcCall(A_ROOM_ID, "m.call#room").apply { newMediaSession = { session } }
+        val rtc = FakeMatrixRtcClient(joinResult = { Result.success(call) })
+        val controller = createController(rtcClient = rtc)
+        controller.setMicrophonePermissionGranted(true)
+        runCurrent()
+        assertThat(controller.state.value!!.isMediaConnected).isFalse()
+        assertThat(controller.state.value!!.connection).isEqualTo(ElementCallConnection.ConnectingMedia)
+        publish.complete(Unit)
+        runCurrent()
+        assertThat(controller.state.value!!.isMediaConnected).isTrue()
+    }
+
+    @Test
+    fun `buffered obsolete own outage cannot undo a recovered publishing connection`() = runTest {
+        val rtc = FakeMatrixRtcClient()
+        val controller = createController(rtcClient = rtc)
+        controller.setMicrophonePermissionGranted(true)
+        runCurrent()
+        val session = rtc.lastCall!!.lastMediaSession!!
+        session.emit(MatrixRtcCallEvent.OwnMediaConnectionState(true))
+        session.emit(MatrixRtcCallEvent.OwnMediaConnectionState(false))
+        runCurrent()
+        assertThat(controller.state.value!!.isMediaConnected).isTrue()
     }
 
     private fun TestScope.createController(

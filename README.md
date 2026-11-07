@@ -41,11 +41,11 @@ See [AGENTS.md](AGENTS.md) for the boundaries between them.
 
 ## Consuming a release
 
-The artifacts are not on Maven Central yet. Each [release](https://github.com/element-hq/element-call-android/releases)
+The artifacts are not on Maven Central yet. Each [release](https://github.com/p-num/element-call-android/releases)
 carries them as assets, laid out so that Gradle resolves them straight from the release through an Ivy repository,
 with their module metadata, POMs and sources; `SHA256SUMS` lists their checksums. The `matrix-rust-rtc` core they
 depend on, `io.element.android:matrix-rtc-android`, is resolved the same way from
-[its own releases](https://github.com/element-hq/matrix-rust-rtc/releases), which carry the bare AAR.
+[its own releases](https://github.com/p-num/matrix-rust-rtc/releases), which carry the bare AAR.
 
 In `settings.gradle.kts`, next to the repositories the build already has (both blocks are content-filtered, so
 nothing else is looked up there, and both go the day the artifacts are on Central):
@@ -54,7 +54,7 @@ nothing else is looked up there, and both go the day the artifacts are on Centra
 dependencyResolutionManagement {
     repositories {
         ivy {
-            url = uri("https://github.com/element-hq/element-call-android/releases/download")
+            url = uri("https://github.com/p-num/element-call-android/releases/download")
             patternLayout { artifact("v[revision]/[artifact]-[revision](-[classifier]).[ext]") }
             metadataSources { gradleMetadata() }
             content {
@@ -66,7 +66,7 @@ dependencyResolutionManagement {
             }
         }
         ivy {
-            url = uri("https://github.com/element-hq/matrix-rust-rtc/releases/download")
+            url = uri("https://github.com/p-num/matrix-rust-rtc/releases/download")
             patternLayout { artifact("v[revision]/[artifact]-[revision].[ext]") }
             metadataSources { artifact() }
             content { includeModule("io.element.android", "matrix-rtc-android") }

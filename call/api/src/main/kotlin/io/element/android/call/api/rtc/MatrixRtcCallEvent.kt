@@ -13,6 +13,9 @@ import io.element.android.call.api.rtc.id.UserId
  * Something that happened on the media transport of a connected call.
  */
 sealed interface MatrixRtcCallEvent {
+    /** This device's publishing connection, independently of remote transport health. */
+    data class OwnMediaConnectionState(val degraded: Boolean) : MatrixRtcCallEvent
+
     /**
      * Someone joined while we are in the call, one per device. Never raised for the members already
      * there when we arrive. [participantCount] is the memberships after the change, ourselves included.

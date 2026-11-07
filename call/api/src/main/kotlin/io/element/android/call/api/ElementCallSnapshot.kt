@@ -38,6 +38,8 @@ import kotlinx.collections.immutable.persistentSetOf
 data class ElementCallSnapshot(
     val callData: ElementCallData,
     val connection: ElementCallConnection,
+    /** Our microphone is published and our publishing connection is healthy, after the call connected. */
+    val isMediaConnected: Boolean = false,
     /**
      * The room's display name, or null until it has been read.
      *

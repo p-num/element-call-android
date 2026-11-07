@@ -74,10 +74,10 @@ interface ElementCallController {
     fun startCall(callData: ElementCallData)
 
     /** Answer the microphone permission request. Denial fails the call. Idempotent. */
-    fun setMicrophonePermissionGranted(granted: Boolean)
+    fun setMicrophonePermissionGranted(granted: Boolean, expectedCall: ElementCallData? = null)
 
     /** Answer the camera permission request. A grant turns the camera on, since asking is what the user just did. */
-    fun setCameraPermissionGranted(granted: Boolean)
+    fun setCameraPermissionGranted(granted: Boolean, expectedCall: ElementCallData? = null)
 
     fun setMicrophoneMuted(muted: Boolean)
 
@@ -179,4 +179,7 @@ interface ElementCallController {
 
     /** End the call and publish a leave membership. */
     fun hangUp()
+
+    /** End this exact attempt and wait for its leave result; a replacement is never touched. */
+    suspend fun hangUpAndWait(expectedCall: ElementCallData): Boolean
 }
