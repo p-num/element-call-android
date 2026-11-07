@@ -84,10 +84,13 @@ changelog reaches `main` afterwards through an ordinary reviewed pull request. T
 
 ### 2. Dry run
 
-**Actions → Release → Run workflow**, on `main`, with the version and `dry_run` left **on**. It is on by default, and
-a dry run can be dispatched from any branch because it publishes nothing; it does build everything, so it takes as
-long as a real run. Dispatch it from the branch you intend to release: `main` for an ordinary release, the release
-branch itself for a hotfix, whose notes are scoped to its own line of history.
+Run the tests, screenshots and quality checks locally first, and save their reports with the exact clean source
+commit. Consuming-app media acceptance must cover that source and its pinned core before publication.
+
+**Actions → Release → Run workflow**, on the validated source, with the version, its complete commit as
+`validated_source_revision`, and `dry_run` left **on**. A dry run builds the packages and minified consumers but
+publishes nothing and runs no tests or quality tasks. Dispatch it from the branch you intend to release: `main`
+for an ordinary release, or the release branch itself for a hotfix.
 
 Then **read the notes it prints.** They are built from the `pr-` labels on the pull requests merged since the last
 tag, and this is the moment to check them, because:
@@ -115,13 +118,14 @@ disagree, so a run dispatched against the wrong branch cannot mint a tag off it.
 
 ### 4. Release
 
-**Actions → Release → Run workflow**, this time with `release/0.2.0` selected and `dry_run` **off**. It will:
+**Actions → Release → Run workflow**, this time with `release/0.2.0` selected, the same
+`validated_source_revision`, and `dry_run` **off**. Its source must still match the locally validated commit. It will:
 
 1. rename `## Unreleased` in `CHANGES.md` to `## 0.2.0 - <date>`, fill it with the generated notes, open a fresh
    empty `## Unreleased` above it, and stamp `VERSION_NAME=0.2.0`;
-2. build, run the unit tests and the quality checks, publish to the runner's local Maven repository, build the
-   minified consumer against it, lay out the release assets and build the consumer again against them the way a
-   host resolves the release;
+2. build the already validated source with `--package-only`, publish to the runner's local Maven repository,
+   build the minified consumer against it, lay out the release assets and build the consumer again against them
+   the way a host resolves the release; tests and quality checks remain local;
 3. commit the two files as `Release 0.2.0`, tag `v0.2.0`, and push the commit and tag **atomically**, so the tag
    can never exist without the changelog entry and the version that describe it;
 4. create the GitHub release from the same notes, with the assets and the sample APK, marked prerelease if the
@@ -273,9 +277,8 @@ Three settings this depends on:
 - **Release immutability is on** (Settings → General → Releases), so a published release's assets and tag never
   change under a host that resolved them.
 - **`release/*` must not be protected**, or the workflow cannot push the release commit to it.
-- **The pull request back to `main` is opened by hand.** A pull request opened with `GITHUB_TOKEN` does not trigger
-  other workflows, so the checks would not run on it; the job summary gives you the link rather than the workflow
-  creating it.
+- **The pull request back to `main` is opened by hand.** Link the local validation and consuming-app receipts;
+  the job summary gives you the link rather than the workflow creating it. Test and quality workflows stay disabled.
 
 ## Letro local validation
 
