@@ -2,7 +2,7 @@ name: Release
 
 # Cuts a release from a release/<version> branch, the way element-call-ios does: scripts/release.sh
 # validates the version, generates the notes from the pull request labels, closes the changelog section,
-# stamps VERSION_NAME, builds and tests, and lays out the release assets; this workflow then drafts the GitHub
+# stamps VERSION_NAME and builds the locally validated source, and lays out the release assets; this workflow then drafts the GitHub
 # release with the assets, commits, tags v<version>, pushes both atomically and publishes the release, which is
 # where a host resolves the library from (README, "Consuming a release"). The changelog reaches main afterwards
 # through an ordinary pull request. See RELEASING.md, including why publishing to Maven Central is gated on a
@@ -13,6 +13,10 @@ on:
       version:
         description: "Version to release, bare semver: 0.1.0, or 0.2.0-rc.1 for a prerelease (the tag gets the v)"
         required: true
+      validated_source_revision:
+        description: Complete source commit validated with local tests and checks
+        required: true
+        type: string
       dry_run:
         description: "Validate, build and print, change nothing"
         type: boolean
@@ -27,8 +31,10 @@ concurrency:
   cancel-in-progress: false
 
 env:
+  GH_REPO: ${{ github.repository }}
+  VALIDATED_SOURCE_REVISION: ${{ inputs.validated_source_revision }}
   GRADLE_OPTS: -Dorg.gradle.jvmargs="-Xmx6g -XX:MaxMetaspaceSize=1g -Dfile.encoding=UTF-8 -XX:+HeapDumpOnOutOfMemoryError" -Dkotlin.daemon.jvm.options=-Xmx2g -XX:+UseG1GC
-  CI_GRADLE_ARG_PROPERTIES: --stacktrace --no-configuration-cache
+  CI_GRADLE_ARG_PROPERTIES: --stacktrace --no-configuration-cache --no-daemon --max-workers=2
 
 jobs:
   release:
@@ -36,8 +42,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
 
-    # Skip in forks
-    if: github.repository == 'element-hq/element-call-android'
+    # Publish only the Letro fork
+    if: github.repository == 'p-num/element-call-android'
 
     # GITHUB_TOKEN is enough, and that is the point of releasing from a branch rather than from main. The
     # release commit and tag go to release/<version>, which is not protected, so nothing here needs a
@@ -90,7 +96,7 @@ jobs:
           cache-read-only: true
 
       # Validates the version, generates the notes from the pull request labels, prepends them to CHANGES.md,
-      # stamps VERSION_NAME, then builds, tests, checks, publishes locally, builds the minified consumer twice
+      # stamps VERSION_NAME, then builds the locally validated source and publishes locally, builds the minified consumer twice
       # and lays out the release assets. Touches nothing but the working tree, build/ and ~/.m2, so it is the
       # same command a maintainer runs to rehearse. Every refusal is in there.
       - name: Prepare the release
@@ -102,7 +108,10 @@ jobs:
         # $DRY_RUN_FLAG unquoted on purpose: it must vanish when empty rather than become an empty
         # argument. It is a literal chosen by the expression above, never user input.
         # shellcheck disable=SC2086
-        run: ./scripts/release.sh "$VERSION" $DRY_RUN_FLAG
+        run: |
+          args=()
+          if [ "$DRY_RUN_FLAG" = "--dry-run" ]; then args+=(--dry-run); fi
+          ./scripts/release.sh "$VERSION" --package-only "${args[@]}"
 
       # The two files the release commit will carry, shown while a dry run is the only chance to read them
       # before the tag exists.
@@ -110,7 +119,9 @@ jobs:
         run: git --no-pager diff -- CHANGES.md gradle.properties
 
       - name: Build the sample APK
-        run: ./gradlew :sample:assembleDebug $CI_GRADLE_ARG_PROPERTIES
+        run: |
+          read -r -a gradle_args <<< "$CI_GRADLE_ARG_PROPERTIES"
+          ./gradlew :sample:assembleDebug "${gradle_args[@]}"
 
       # Uploaded on every run, before anything is published. On a dry run this is the output to read; on a
       # real run it is the recovery path: if drafting or publishing the release fails, the notes and assets it
@@ -209,7 +220,9 @@ jobs:
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
           ORG_GRADLE_PROJECT_signingInMemoryKey: ${{ secrets.MAVEN_SIGNING_KEY }}
           ORG_GRADLE_PROJECT_signingInMemoryKeyPassword: ${{ secrets.MAVEN_SIGNING_KEY_PASSWORD }}
-        run: ./gradlew publishAndReleaseToMavenCentral -PRELEASE_SIGNING_ENABLED=true $CI_GRADLE_ARG_PROPERTIES
+        run: |
+          read -r -a gradle_args <<< "$CI_GRADLE_ARG_PROPERTIES"
+          ./gradlew publishAndReleaseToMavenCentral -PRELEASE_SIGNING_ENABLED=true "${gradle_args[@]}"
 
       # The tag is the release and it is already public; this pull request only carries the changelog entry
       # and the version back to main. Opened by hand, deliberately: a pull request opened with GITHUB_TOKEN
