@@ -64,7 +64,7 @@ for the three layers (local core, library from source inside Element X, library 
 
 - Build everything: `./gradlew assemble`
 - Unit tests: `./gradlew test`
-- Screenshot tests: `./gradlew :tests:uitests:verifyPaparazziDebug` (recording is CI's job, see `docs/screenshot_testing.md`)
+- Screenshot tests: `./gradlew :tests:uitests:verifyPaparazziDebug` (record and verify locally)
 - The sample on a device: `./gradlew :sample:installDebug`; its gesture and pixel tests: `./gradlew :sample:connectedDebugAndroidTest`
 - A layout scenario on the device: `adb shell am start -n io.element.android.call.sample/.SampleActivity --es scenario 004_scroll_and_rank`
   (the corpus is `call/test/src/main/resources/scenarios/`, vendored from feature-hq `plans/003.call_layout/scenarios/`,
@@ -136,7 +136,7 @@ until one does.
   `io.element.android.call.ui.preview`; day and night) and
   wrapped in `ElementCallPreview { }`. Preview functions are `internal` and named `<View>Preview`.
 - States come from a `<State>PreviewParam : PreviewParameterProvider`.
-- Screenshots are recorded by CI (`Record-Screenshots` label), never locally.
+- Record and verify screenshots locally. Do not request CI screenshot recording.
 
 ### Tests
 
@@ -196,9 +196,17 @@ without the flag it also builds and lays out the assets in `build/release-assets
   the non-obvious decision). When there is one, it is a single line under 80 characters.
 - `CHANGES.md`'s `## Unreleased` is for what a host has to act on, a line or two per item. The release notes are
   the pull request titles; do not restate them there.
-- Add the `Record-Screenshots` label when previews change.
+- Verify changed previews locally; never add the `Record-Screenshots` label.
 - Plans are frozen once implementation starts; discoveries go in the plan's appendix, not its body.
 
 ## Keep this file current
 
 When a boundary, a command or a convention changes, change it here in the same PR.
+
+## Letro CI policy
+
+GitHub Actions is reserved for builds, package publication and release bookkeeping.
+Run every test, screenshot, coverage and standalone quality check locally. Keep the
+workflows listed in `.github/ci-policy.json` disabled; do not dispatch them as a fallback.
+Keep Copilot review enabled. Releases take the exact locally validated source commit
+and use `scripts/release.sh --package-only`; this mode refuses a different checkout.

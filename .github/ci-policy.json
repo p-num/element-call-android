@@ -1,0 +1,5 @@
+{
+  "allowed": ["build.yml", "build-rtc-android.yml", "release.yml", "pr-label.yml", "translations.yml"],
+  "disabled": ["tests.yml", "quality.yml", "consumer-check.yml", "instrumented.yml", "recordScreenshots.yml", "validate-lfs.yml"],
+  "validation": "Run tests, screenshots and standalone quality checks locally. Copilot review remains enabled."
+}

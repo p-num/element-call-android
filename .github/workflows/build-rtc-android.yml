@@ -1,0 +1,102 @@
+# Copyright (c) 2026 Element Creations Ltd.
+#
+# SPDX-License-Identifier: AGPL-3.0-only OR LicenseRef-Element-Commercial.
+# Please see LICENSE files in the repository root for full details.
+
+name: Build Android RTC package
+
+on:
+  workflow_dispatch:
+    inputs:
+      source_revision:
+        description: Exact published MatrixRTC source commit
+        type: string
+        required: true
+        default: b2f060fe609b4fd95ae2208ca7ac0e97e2751169
+      version:
+        description: MatrixRTC package version
+        type: string
+        required: true
+        default: 0.5.0-rc.9-letro.1
+
+permissions:
+  contents: read
+
+concurrency:
+  group: build-android-rtc-package
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      CARGO_BUILD_JOBS: "2"
+      MEDIA: "1"
+      SOURCE_REVISION: ${{ inputs.source_revision }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          repository: p-num/matrix-rust-rtc
+          ref: ${{ inputs.source_revision }}
+          persist-credentials: false
+      - name: Verify the package source
+        run: |
+          python3 - <<'PY'
+          import os, re, subprocess, tomllib
+          expected = os.environ["SOURCE_REVISION"]
+          assert re.fullmatch(r"[a-f0-9]{40}", expected), "Use a complete source commit"
+          assert subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip() == expected
+          with open("Cargo.toml", "rb") as source:
+              assert tomllib.load(source)["workspace"]["package"]["version"] == os.environ["VERSION"]
+          PY
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: aarch64-linux-android,armv7-linux-androideabi,x86_64-linux-android
+      - uses: actions/setup-java@dd06d9cba3e5552c54d9f8ea23572deb30010f7c
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: Swatinem/rust-cache@v2
+        with:
+          shared-key: letro-android-rtc-package
+      - name: Install the Android Rust build tool
+        run: cargo install cargo-ndk --locked
+      - name: Build the stripped Android package
+        run: |
+          ./scripts/build-android-aar.sh --profile mobile-release --split-debug --version "$VERSION"
+      - name: Record the built package
+        run: |
+          mkdir -p dist
+          cp mobile/android/matrixrtc/build/outputs/aar/matrixrtc-release.aar "dist/matrix-rtc-android-$VERSION.aar"
+          python3 - <<'PY'
+          import hashlib, io, json, os, pathlib, zipfile
+          artifact = pathlib.Path("dist") / f"matrix-rtc-android-{os.environ['VERSION']}.aar"
+          with zipfile.ZipFile(artifact) as archive:
+              abis = ["arm64-v8a", "armeabi-v7a", "x86_64"]
+              libraries = {abi: archive.read(f"jni/{abi}/libmatrix_rtc_ffi.so") for abi in abis}
+              with zipfile.ZipFile(io.BytesIO(archive.read("classes.jar"))) as classes:
+                  assert b"getCallIntent" in classes.read("org/matrix/rtc/FfiJoinSessionParams.class")
+          receipt = {
+              "source_repository": "p-num/matrix-rust-rtc",
+              "source_revision": os.environ["SOURCE_REVISION"],
+              "version": os.environ["VERSION"],
+              "artifact": artifact.name,
+              "sha256": hashlib.sha256(artifact.read_bytes()).hexdigest(),
+              "native_sha256": {abi: hashlib.sha256(data).hexdigest() for abi, data in libraries.items()},
+          }
+          pathlib.Path("dist/provenance.json").write_text(json.dumps(receipt, indent=2) + "\n")
+          PY
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-rtc-package
+          path: dist/
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android-rtc-debug-symbols
+          path: mobile/android/debuginfo/
+          if-no-files-found: error
+          retention-days: 14

@@ -275,3 +275,16 @@ Three settings this depends on:
 - **The pull request back to `main` is opened by hand.** A pull request opened with `GITHUB_TOKEN` does not trigger
   other workflows, so the checks would not run on it; the job summary gives you the link rather than the workflow
   creating it.
+
+## Letro local validation
+
+Tests, screenshots and standalone quality checks run locally. Supply their exact
+source commit as `validated_source_revision` when dispatching Release. The workflow
+builds packages with `--package-only` and refuses a different source commit; it does
+not run test or quality tasks. Keep the local reports linked in the release PR.
+
+`Build Android RTC package` builds the Android binary for an exact published commit
+of `p-num/matrix-rust-rtc`. It produces all three Android ABIs, records checksums and
+keeps debug symbols separate. It never publishes or runs tests. After local native
+and app acceptance, attach the verified binary to that existing MatrixRTC release
+before publishing the native Call component that consumes it.

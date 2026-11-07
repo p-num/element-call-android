@@ -18,13 +18,16 @@ set -euo pipefail
 
 usage() {
     cat >&2 <<'USAGE'
-Usage: scripts/release.sh <version> [--notes-out <path>] [--dry-run] [--skip-build]
+Usage: scripts/release.sh <version> [--notes-out <path>] [--dry-run] [--skip-build] [--package-only]
 
   <version>       The version to release, bare semver: 0.1.0, or 0.2.0-rc.1 for a prerelease. The tag is v<version>.
   --notes-out     Where to write the generated release notes (default: release-notes.md, gitignored).
   --dry-run       The caller will not publish: says so in the output, changes nothing else.
   --skip-build    Stop after the changelog and the version stamp, without the Gradle build and the
                   release assets. For a quick local look at the notes; never what release.yml runs.
+
+  --package-only  Build and package a source commit already validated locally. Requires
+                  VALIDATED_SOURCE_REVISION to equal HEAD. CI uses this mode and never runs tests.
 
 Gradle arguments come from the CI_GRADLE_ARG_PROPERTIES environment variable, as in every workflow.
 USAGE
@@ -35,6 +38,7 @@ VERSION=""
 NOTES_OUT="release-notes.md"
 DRY_RUN="no"
 SKIP_BUILD="no"
+PACKAGE_ONLY="no"
 
 while [ $# -gt 0 ]; do
     case "$1" in
@@ -45,6 +49,10 @@ while [ $# -gt 0 ]; do
             ;;
         --dry-run)
             DRY_RUN="yes"
+            shift
+            ;;
+        --package-only)
+            PACKAGE_ONLY="yes"
             shift
             ;;
         --skip-build)
@@ -90,6 +98,15 @@ fail() {
     fi
     exit 1
 }
+
+if [ -n "${GITHUB_ACTIONS:-}" ] && [ "$SKIP_BUILD" != "yes" ] && [ "$PACKAGE_ONLY" != "yes" ]; then
+    fail "CI may build release packages only; run validation locally and use --package-only."
+fi
+if [ "$PACKAGE_ONLY" = "yes" ]; then
+    [[ "${VALIDATED_SOURCE_REVISION:-}" =~ ^[a-f0-9]{40}$ ]] || fail "Supply the complete locally validated source commit."
+    [ "$(git rev-parse HEAD)" = "$VALIDATED_SOURCE_REVISION" ] || fail "The checkout differs from the locally validated commit."
+    [ -z "$(git status --porcelain --untracked-files=normal)" ] || fail "Packaging requires a clean locally validated checkout."
+fi
 
 # --- 1. The version is bare semver; the tag carries a v ---------------------------------------------------
 #
@@ -147,7 +164,7 @@ fi
 # creates nothing, reading the categories from .github/release.yml on its own. That is what lets the tag be
 # created last and still contain its own changelog entry.
 SHA="$(git rev-parse HEAD)"
-REPOSITORY="${GITHUB_REPOSITORY:-element-hq/element-call-android}"
+REPOSITORY="${GITHUB_REPOSITORY:-${GH_REPO:-p-num/element-call-android}}"
 BODY_ARGS=(-f "tag_name=$TAG" -f "target_commitish=$SHA")
 if [ -n "$LATEST_TAG" ]; then
     BODY_ARGS+=(-f "previous_tag_name=$LATEST_TAG")
@@ -262,28 +279,32 @@ fi
 #
 # The stamped tree is what gets built, so the artifacts carry the version the tag will. Gradle arguments
 # come from CI_GRADLE_ARG_PROPERTIES, unquoted on purpose: it is a list of flags, or nothing.
-GRADLE_ARGS=${CI_GRADLE_ARG_PROPERTIES:-}
+read -r -a GRADLE_ARGS <<< "${CI_GRADLE_ARG_PROPERTIES:-}"
 
 if [ ! -f rtc/local/matrixrtc-release.aar ]; then
     fail "No core AAR at rtc/local/matrixrtc-release.aar. Run ./tools/rtc/fetch-rust-rtc (docs/local_stack.md, layer 1)."
 fi
 
-# shellcheck disable=SC2086
-echo "Building, testing and checking $VERSION"
-./gradlew build runQualityChecks $GRADLE_ARGS
+if [ "$PACKAGE_ONLY" = "yes" ]; then
+    echo "Building packages from locally validated $VALIDATED_SOURCE_REVISION"
+    ./gradlew assemble "${GRADLE_ARGS[@]}"
+else
+    echo "Building, testing and checking $VERSION"
+    ./gradlew build runQualityChecks "${GRADLE_ARGS[@]}"
+fi
 
 echo "Publishing $VERSION to the local Maven repository"
-./gradlew publishToMavenLocal $GRADLE_ARGS
+./gradlew publishToMavenLocal "${GRADLE_ARGS[@]}"
 
 echo "Building the minified consumer against the published artifacts"
-./gradlew -p tests/consumer :app:assembleRelease -PelementCallVersion="$VERSION" $GRADLE_ARGS
+./gradlew -p tests/consumer :app:assembleRelease -PelementCallVersion="$VERSION" "${GRADLE_ARGS[@]}"
 
 echo "Laying out the release assets"
 # A Maven layout under build/dist, flattened into one directory: the GitHub release's assets, which a host
 # resolves through an Ivy repository (README, "Consuming a release"). Maven's own sidecar checksums are
 # dropped in favour of one SHA256SUMS. The core is not among them: the core's own release carries it.
 rm -rf "$DIST" "$ASSETS"
-./gradlew publishAllPublicationsToDistRepository $GRADLE_ARGS
+./gradlew publishAllPublicationsToDistRepository "${GRADLE_ARGS[@]}"
 mkdir -p "$ASSETS"
 find "$DIST/io/element/android" -type f -path "*/$VERSION/*" \
     ! -name 'maven-metadata*' ! -name '*.md5' ! -name '*.sha1' ! -name '*.sha256' ! -name '*.sha512' \
@@ -296,7 +317,7 @@ fi
 ls "$ASSETS"
 
 echo "Building the minified consumer against the release assets, laid out as a host resolves them"
-./gradlew -p tests/consumer :app:assembleRelease -PelementCallVersion="$VERSION" -PelementCallDistDir="$PWD/$ASSETS" $GRADLE_ARGS
+./gradlew -p tests/consumer :app:assembleRelease -PelementCallVersion="$VERSION" -PelementCallDistDir="$PWD/$ASSETS" "${GRADLE_ARGS[@]}"
 
 echo
 if [ "$DRY_RUN" = "yes" ]; then
