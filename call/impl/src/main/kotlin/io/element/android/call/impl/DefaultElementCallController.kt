@@ -1042,14 +1042,16 @@ internal class DefaultElementCallController(
             try {
                 runCatchingExceptions { endingSoundEffectRenderer?.release() }
                     .onFailure { Timber.w(it, "ElementCall: releasing call sounds failed") }
-                val isNextCallRunning = mutex.withLock { _state.value != null }
-                if (!isNextCallRunning) {
-                    runCatchingExceptions { audioDeviceController.stop() }
-                        .onFailure { Timber.w(it, "ElementCall: stopping audio routing failed") }
-                    runCatchingExceptions { audioFocus.releaseAudioFocus() }
-                        .onFailure { Timber.w(it, "ElementCall: releasing audio focus failed") }
-                    runCatchingExceptions { platform.stopForegroundService() }
-                        .onFailure { Timber.w(it, "ElementCall: stopping the foreground service failed") }
+                // A new start must not acquire resources between the ownership check and their release.
+                mutex.withLock {
+                    if (_state.value == null) {
+                        runCatchingExceptions { audioDeviceController.stop() }
+                            .onFailure { Timber.w(it, "ElementCall: stopping audio routing failed") }
+                        runCatchingExceptions { audioFocus.releaseAudioFocus() }
+                            .onFailure { Timber.w(it, "ElementCall: releasing audio focus failed") }
+                        runCatchingExceptions { platform.stopForegroundService() }
+                            .onFailure { Timber.w(it, "ElementCall: stopping the foreground service failed") }
+                    }
                 }
             } finally {
                 lifecycleListener.onCallEnded(endedCallData, teardown.reason?.toEndReason() ?: ElementCallEndReason.LEFT)

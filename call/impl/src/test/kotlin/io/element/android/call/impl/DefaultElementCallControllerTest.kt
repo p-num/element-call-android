@@ -613,6 +613,32 @@ class DefaultElementCallControllerTest {
     }
 
     @Test
+    fun `a replacement cannot acquire platform resources halfway through the old release`() = runTest {
+        lateinit var controller: DefaultElementCallController
+        val replacement = ElementCallData(roomId = A_ROOM_ID, isAudioCall = true, isStartingCall = true)
+        var startedDuringRelease: Boolean? = null
+        val platform = FakeElementCallPlatform()
+        val focus = FakeAudioFocus(requestAudioFocusResult = {}, releaseAudioFocusResult = {
+            controller.startCall(replacement)
+            controller.setMicrophonePermissionGranted(true, replacement)
+            runCurrent()
+            startedDuringRelease = controller.state.value?.callData === replacement
+        })
+        controller = createController(platform = platform, audioFocus = focus)
+        controller.setMicrophonePermissionGranted(true)
+        runCurrent()
+
+        controller.hangUp()
+        runCurrent()
+
+        assertThat(startedDuringRelease).isFalse()
+        assertThat(controller.state.value?.callData).isSameInstanceAs(replacement)
+        assertThat(controller.state.value?.isMicrophonePermissionGranted).isTrue()
+        assertThat(platform.startForegroundServiceCount).isEqualTo(2)
+        assertThat(platform.stopForegroundServiceCount).isEqualTo(1)
+    }
+
+    @Test
     fun `a join and a leave play their sounds, a screen share plays nothing`() = runTest {
         val rtcClient = FakeMatrixRtcClient()
         val platform = FakeElementCallPlatform()
