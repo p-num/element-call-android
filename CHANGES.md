@@ -12,6 +12,10 @@ actually read it. The matrix-rust-rtc core's own history is the core's:
 
 ## Unreleased
 
+_Nothing yet._
+
+## 0.1.0-rc.10-letro.1 - 2026-11-08
+
 - Permission setters accept their original `ElementCallData`; hosts must pass it to reject late answers for replaced calls.
 - `MatrixRtcRoom.joinCall` accepts the membership media intent independently of ringing or announcements.
 - Hosts can await `ElementCallController.hangUpAndWait` for an exact call attempt before switching calls.
@@ -24,6 +28,18 @@ actually read it. The matrix-rust-rtc core's own history is the core's:
   colours maps Compound's.
 - `ElementCallController` gains `reactionCatalogue` and `sendReaction`, and `MatrixRtcCall` gains `sendReaction`: a
   controller or call of the host's own implements them.
+
+
+
+### What's Changed
+
+⚠️ API Changes
+* Keep native call status and departure tied to the active attempt by @ehsunahmadi in https://github.com/p-num/element-call-android/pull/2
+
+### New Contributors
+* @ehsunahmadi made their first contribution in https://github.com/p-num/element-call-android/pull/1
+
+**Full Changelog**: https://github.com/p-num/element-call-android/commits/v0.1.0-rc.10-letro.1
 
 ## 0.1.0-rc.10 - 2026-11-04
 
