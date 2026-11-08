@@ -12,6 +12,13 @@ actually read it. The matrix-rust-rtc core's own history is the core's:
 
 ## Unreleased
 
+- Permission setters accept their original `ElementCallData`; hosts must pass it to reject late answers for replaced calls.
+- `MatrixRtcRoom.joinCall` accepts the membership media intent independently of ringing or announcements.
+- Hosts can await `ElementCallController.hangUpAndWait` for an exact call attempt before switching calls.
+- `MatrixRtcMediaSession` implementations provide `isOwnMediaDegraded`; `ElementCallSnapshot.isMediaConnected` reports
+  confirmed local publication and current publishing health separately from roster membership.
+- The shared RTC dependency is `0.5.0-rc.9-letro.2`; hosts resolve its Android AAR from the Letro RTC release, including the late-connect cancellation fix.
+
 - `ElementCallIcons` gains `reaction`, the control bar's way into the reaction picker: a host passing its own icons maps
   Compound's `reactionSolid`. `ElementCallColors` gains `borderInteractiveSecondary`, defaulted: a host passing its own
   colours maps Compound's.

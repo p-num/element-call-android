@@ -36,7 +36,6 @@ import io.element.android.call.api.rtc.MatrixRtcDetailWindow
 import io.element.android.call.api.rtc.MatrixRtcGroupNotify
 import io.element.android.call.api.rtc.MatrixRtcInterruptions
 import io.element.android.call.api.rtc.MatrixRtcJoinException
-import io.element.android.call.api.rtc.MatrixRtcLeaveReason
 import io.element.android.call.api.rtc.MatrixRtcMediaSession
 import io.element.android.call.api.rtc.MatrixRtcReaction
 import io.element.android.call.api.rtc.MatrixRtcReactionKind
@@ -55,6 +54,7 @@ import io.element.android.call.impl.audio.CallSoundEffectRenderer
 import io.element.android.call.impl.audio.GENERIC_REACTION_SOUND
 import io.element.android.call.impl.audio.JoinLeaveSoundPolicy
 import io.element.android.call.impl.audio.RaisedHandSoundPolicy
+import io.element.android.call.impl.util.runCatchingExceptions
 import kotlinx.collections.immutable.persistentListOf
 import kotlinx.collections.immutable.toImmutableList
 import kotlinx.collections.immutable.toImmutableMap
@@ -64,6 +64,7 @@ import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.async
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.coroutineScope
@@ -122,6 +123,7 @@ internal class DefaultElementCallController(
     private val preferencesStore: ElementCallPreferencesStore,
 ) : ElementCallController {
     private val mutex = Mutex()
+    private var mediaPublicationReady = false
 
     private val _state = MutableStateFlow<ElementCallSnapshot?>(null)
 
@@ -367,13 +369,12 @@ internal class DefaultElementCallController(
      * What kind of call this join is (feature-hq 030 C1): a DM call, which rings only when the user chose to
      * call, or a group call, which only ever shows the others a notification, and only when we start it.
      */
-    private suspend fun callKindFor(callData: ElementCallData): MatrixRtcCallKind {
+    private suspend fun callKindFor(callData: ElementCallData, intent: MatrixRtcCallIntent): MatrixRtcCallKind {
         // Defaults to a group call rather than a ring if the room cannot be read in time: an unwanted
         // ring wakes people up, a missing one only makes the call quieter than it should have been.
         val isDm = withTimeoutOrNull(ROOM_CONTEXT_TIMEOUT_MS) {
             roomContextProvider.roomContext(callData.roomId).first()
         }?.isDm == true
-        val intent = if (callData.isAudioCall) MatrixRtcCallIntent.AUDIO else MatrixRtcCallIntent.VIDEO
         return when {
             isDm && callData.isStartingCall -> MatrixRtcCallKind.Direct(MatrixRtcRing(intent, options.ringLifetime?.inWholeMilliseconds?.toULong()))
             isDm -> MatrixRtcCallKind.Direct(ring = null)
@@ -407,10 +408,11 @@ internal class DefaultElementCallController(
      * Answer the microphone permission request. Denial fails the call: it is audio first, and
      * `AudioRecord` would fail anyway.
      */
-    override fun setMicrophonePermissionGranted(granted: Boolean) {
+    override fun setMicrophonePermissionGranted(granted: Boolean, expectedCall: ElementCallData?) {
         scope.launch {
             mutex.withLock {
                 val current = _state.value ?: return@withLock
+                if (expectedCall != null && current.callData !== expectedCall) return@withLock
                 if (!granted) {
                     Timber.i("ElementCall: microphone permission denied")
                     updateState { it.copy(connection = ElementCallConnection.Failed(ElementCallFailure.Other("Microphone permission denied"))) }
@@ -435,10 +437,13 @@ internal class DefaultElementCallController(
         }
     }
 
-    override fun setCameraPermissionGranted(granted: Boolean) {
+    override fun setCameraPermissionGranted(granted: Boolean, expectedCall: ElementCallData?) {
         scope.launch {
+            val current = _state.value ?: return@launch
+            if (expectedCall != null && current.callData !== expectedCall) return@launch
             updateState { it.copy(isCameraPermissionGranted = granted) }
             if (!granted) return@launch
+            val media = call ?: return@launch
             // Started again, not for the first time: the service is already running for the
             // microphone, and this is what lets it add the camera type it could not claim before.
             // Without it, capture stops the moment the call is backgrounded.
@@ -451,7 +456,7 @@ internal class DefaultElementCallController(
             // this up front, as the screen does for a video call, and on an audio call that would
             // start a camera nobody reached for - so what the call joins with is recorded by the
             // button, in setCameraEnabled, and nowhere else.
-            call?.setCameraEnabled(true)
+            media.setCameraEnabled(true)
         }
     }
 
@@ -642,6 +647,9 @@ internal class DefaultElementCallController(
         scope.launch { endCall(leave = true) }
     }
 
+    override suspend fun hangUpAndWait(expectedCall: ElementCallData): Boolean =
+        scope.async { endCall(leave = true, expectedCall = expectedCall) }.await()
+
     private suspend fun runCall(callData: ElementCallData) {
         updateState { it.copy(connection = ElementCallConnection.Joining) }
         Timber.i("ElementCall: joining ${callData.roomId}")
@@ -658,12 +666,13 @@ internal class DefaultElementCallController(
             return
         }
         rtcRoom = room
-        val kind = callKindFor(callData)
+        val intent = if (callData.isAudioCall) MatrixRtcCallIntent.AUDIO else MatrixRtcCallIntent.VIDEO
+        val kind = callKindFor(callData, intent)
         // A DM call we start shows that it is calling from here, before the join returns (030 C3).
         if (kind is MatrixRtcCallKind.Direct && kind.ring != null) {
             updateState { it.copy(connection = ElementCallConnection.Calling(callee = null, isRinging = false)) }
         }
-        val joined = room.joinCall(kind = kind).getOrElse {
+        val joined = room.joinCall(kind = kind, callIntent = intent).getOrElse {
             when (it) {
                 is MatrixRtcJoinException.TimedOut -> fail(ElementCallFailure.JoinTimedOut, "Join failed: ${it.message}")
                 is MatrixRtcJoinException.Refused -> fail(ElementCallFailure.JoinRefused, "Join failed: ${it.message}")
@@ -740,6 +749,7 @@ internal class DefaultElementCallController(
         // it has not been asked to capture yet - over the state the call is joining with.
         val wantsCamera = _state.value?.isCameraEnabled == true
 
+        mediaPublicationReady = true
         startObservers(joined, connected)
 
         // A video call starts with the camera on. The caller asked for video and the callee
@@ -768,16 +778,14 @@ internal class DefaultElementCallController(
             val isRinging = status is MatrixRtcCallStatus.Calling && status.ring is MatrixRtcRingPhase.Ringing
             if (isRinging) soundEffectRenderer?.startLoop(CallSoundEffect.RINGBACK) else soundEffectRenderer?.stopLoop()
             when (status) {
-                MatrixRtcCallStatus.Connecting -> updateState { it.copy(connection = ElementCallConnection.ConnectingMedia) }
+                MatrixRtcCallStatus.Connecting -> updateState { it.copy(connection = ElementCallConnection.ConnectingMedia, isMediaConnected = false) }
                 is MatrixRtcCallStatus.Calling -> updateState {
-                    it.copy(connection = ElementCallConnection.Calling(status.callee, isRinging = status.ring is MatrixRtcRingPhase.Ringing))
-                }
-                is MatrixRtcCallStatus.Connected -> updateState {
                     it.copy(
-                        connection = ElementCallConnection.Connected,
-                        connectedAtElapsedMs = it.connectedAtElapsedMs ?: elapsedRealtimeAt(status.sinceMs),
+                        connection = ElementCallConnection.Calling(status.callee, isRinging = status.ring is MatrixRtcRingPhase.Ringing),
+                        isMediaConnected = false
                     )
                 }
+                is MatrixRtcCallStatus.Connected -> updateMediaConnection(status)
                 is MatrixRtcCallStatus.Ended -> {
                     Timber.i("ElementCall: the call ended, ${status.reason}")
                     joinLeaveSoundPolicy?.silence()
@@ -793,12 +801,27 @@ internal class DefaultElementCallController(
                         fail(ElementCallFailure.ConnectionLost(lost.reason), "Connection lost: ${lost.message}")
                         return@collect
                     }
-                    updateState { it.copy(connection = ElementCallConnection.Ended) }
+                    updateState { it.copy(connection = ElementCallConnection.Ended, isMediaConnected = false) }
                     // Torn down from a coroutine of its own, not this one: endCall cancels the job this
                     // collector runs in, and a coroutine cannot wait for its own death. Never left again:
                     // the core has already left, or is leaving, on every end it reports.
                     scope.launch { endCall(leave = false) }
                 }
+            }
+        }
+    }
+
+    private fun updateMediaConnection(status: MatrixRtcCallStatus.Connected) {
+        val ready = mediaPublicationReady && call?.isOwnMediaDegraded?.value == false
+        updateState {
+            if (it.connection is ElementCallConnection.Failed || it.connection is ElementCallConnection.RingNotSent) {
+                it
+            } else {
+                it.copy(
+                connection = if (ready) ElementCallConnection.Connected else ElementCallConnection.ConnectingMedia,
+                isMediaConnected = ready,
+                connectedAtElapsedMs = it.connectedAtElapsedMs ?: status.sinceMs.takeIf { ready }?.let(::elapsedRealtimeAt),
+            )
             }
         }
     }
@@ -838,6 +861,11 @@ internal class DefaultElementCallController(
     private fun CoroutineScope.startObservers(rtcCall: MatrixRtcCall, call: MatrixRtcMediaSession) {
         fun observe(block: suspend () -> Unit) = launch(start = CoroutineStart.UNDISPATCHED) { block() }
 
+        observe {
+            call.isOwnMediaDegraded.collect {
+                (rtcCall.status.value as? MatrixRtcCallStatus.Connected)?.let(::updateMediaConnection)
+            }
+        }
         observe { rtcCall.memberCount.collect { value -> updateState { it.copy(memberCount = value) } } }
         observe { call.tiles.collect { value -> updateState { it.copy(roster = value) } } }
         observe { call.interruptions.collect { interruptionRecord.value = it } }
@@ -950,7 +978,7 @@ internal class DefaultElementCallController(
 
     private fun fail(failure: ElementCallFailure, message: String) {
         Timber.w("ElementCall: $message")
-        _state.update { it?.copy(connection = ElementCallConnection.Failed(failure)) }
+        _state.update { it?.copy(connection = ElementCallConnection.Failed(failure), isMediaConnected = false) }
         // Not torn down here: the message is the whole point of the failed state, and clearing the
         // snapshot would take it off screen before it could be read. The host dismisses the call.
     }
@@ -961,14 +989,15 @@ internal class DefaultElementCallController(
      * Safe to call twice and safe to call with no call running - both happen, because a call can end
      * from the far end and from the user's hang-up at the same moment.
      */
-    private suspend fun endCall(leave: Boolean) {
+    private suspend fun endCall(leave: Boolean, expectedCall: ElementCallData? = null): Boolean {
         val leavingRoom: MatrixRtcRoom?
         val leavingRtcCall: MatrixRtcCall?
         val leavingCall: MatrixRtcMediaSession?
         val endedCallData: ElementCallData?
         val endingSoundEffectRenderer: CallSoundEffectRenderer?
         mutex.withLock {
-            if (_state.value == null && callJob == null) return
+            if (expectedCall != null && _state.value?.callData !== expectedCall) return false
+            if (_state.value == null && callJob == null) return true
             Timber.i("ElementCall: ending call (leave=$leave)")
             // First: nothing below may sound like people leaving.
             joinLeaveSoundPolicy?.silence()
@@ -989,6 +1018,7 @@ internal class DefaultElementCallController(
             rtcRoom = null
             rtcCall = null
             call = null
+            mediaPublicationReady = false
             joinLeaveSoundPolicy = null
             raisedHandSoundPolicy = null
             soundEffectRenderer?.stopLoop()
@@ -1003,32 +1033,30 @@ internal class DefaultElementCallController(
             _state.value = null
         }
 
-        // Outside the lock: leaving talks to the homeserver, and holding the lock across it would
-        // block a start for the next call behind a network round trip.
-        leavingCall?.disconnect()
-        leavingCall?.close()
-        // Read before leaving, which ends it as Left: any other end is one the core has already left on.
-        val coreEnd = (leavingRtcCall?.status?.value as? MatrixRtcCallStatus.Ended)?.reason
-        if (leavingRtcCall != null) {
-            if (leave && coreEnd == null) leavingRtcCall.leave(MatrixRtcLeaveReason(code = HANGUP_REASON))
-            leavingRtcCall.close()
+        val teardown = CallTeardown(leavingRoom, leavingRtcCall, leavingCall)
+        try {
+            val departed = teardown.close(leave)
+            teardown.reason?.endSound()?.let { endingSoundEffectRenderer?.playToEnd(it) }
+            return departed
+        } finally {
+            try {
+                runCatchingExceptions { endingSoundEffectRenderer?.release() }
+                    .onFailure { Timber.w(it, "ElementCall: releasing call sounds failed") }
+                // A new start must not acquire resources between the ownership check and their release.
+                mutex.withLock {
+                    if (_state.value == null) {
+                        runCatchingExceptions { audioDeviceController.stop() }
+                            .onFailure { Timber.w(it, "ElementCall: stopping audio routing failed") }
+                        runCatchingExceptions { audioFocus.releaseAudioFocus() }
+                            .onFailure { Timber.w(it, "ElementCall: releasing audio focus failed") }
+                        runCatchingExceptions { platform.stopForegroundService() }
+                            .onFailure { Timber.w(it, "ElementCall: stopping the foreground service failed") }
+                    }
+                }
+            } finally {
+                lifecycleListener.onCallEnded(endedCallData, teardown.reason?.toEndReason() ?: ElementCallEndReason.LEFT)
+            }
         }
-        // Last: the leave goes through the room.
-        leavingRoom?.shutdown()
-
-        // The screen has closed already; the sound plays to its end before the call's audio goes (030 R25).
-        coreEnd?.endSound()?.let { endingSoundEffectRenderer?.playToEnd(it) }
-        endingSoundEffectRenderer?.release()
-        val isNextCallRunning = mutex.withLock { _state.value != null }
-        // A call started while the sound played holds the route, the focus and the service now.
-        if (!isNextCallRunning) {
-            audioDeviceController.stop()
-            audioFocus.releaseAudioFocus()
-            platform.stopForegroundService()
-        }
-        // Clears the host's active call, and stops a ring that never got answered - hanging up from
-        // the call screen while the far end is still ringing us is a real sequence, not a hypothetical.
-        lifecycleListener.onCallEnded(endedCallData, coreEnd?.toEndReason() ?: ElementCallEndReason.LEFT)
     }
 
     internal companion object {

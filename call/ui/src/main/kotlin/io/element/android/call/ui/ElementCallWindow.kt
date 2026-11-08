@@ -32,6 +32,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -238,13 +239,17 @@ internal data class CallPermissions(
  * the idempotent answers.
  */
 @Composable
-internal fun rememberCallPermissions(controller: ElementCallController, current: ElementCallSnapshot): CallPermissions {
+internal fun rememberCallPermissions(controller: ElementCallController, current: ElementCallSnapshot): CallPermissions =
+    key(CallAttemptKey(current.callData)) { rememberAttemptPermissions(controller, current) }
+
+@Composable
+private fun rememberAttemptPermissions(controller: ElementCallController, current: ElementCallSnapshot): CallPermissions {
     val context = LocalContext.current
     val microphoneLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        controller.setMicrophonePermissionGranted(granted)
+        controller.setMicrophonePermissionGranted(granted, current.callData)
     }
     val cameraLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        controller.setCameraPermissionGranted(granted)
+        controller.setCameraPermissionGranted(granted, current.callData)
     }
     // Not a permission request: the screen-capture dialog returns an Intent that *is* the grant,
     // single-use, so there is nothing to remember and nothing to check before asking. A refusal
@@ -263,7 +268,7 @@ internal fun rememberCallPermissions(controller: ElementCallController, current:
     LaunchedEffect(current.connection) {
         if (current.connection != ElementCallConnection.RequestingPermission) return@LaunchedEffect
         if (context.isGranted(Manifest.permission.RECORD_AUDIO)) {
-            controller.setMicrophonePermissionGranted(true)
+            controller.setMicrophonePermissionGranted(true, current.callData)
         } else {
             microphoneLauncher.launch(Manifest.permission.RECORD_AUDIO)
         }
@@ -276,7 +281,7 @@ internal fun rememberCallPermissions(controller: ElementCallController, current:
         if (current.callData.isAudioCall || !current.isMicrophonePermissionGranted) return@LaunchedEffect
         if (current.isCameraPermissionGranted) return@LaunchedEffect
         if (context.isGranted(Manifest.permission.CAMERA)) {
-            controller.setCameraPermissionGranted(true)
+            controller.setCameraPermissionGranted(true, current.callData)
         } else {
             cameraLauncher.launch(Manifest.permission.CAMERA)
         }
@@ -286,7 +291,7 @@ internal fun rememberCallPermissions(controller: ElementCallController, current:
         CallPermissions(
             requestCamera = {
                 if (context.isGranted(Manifest.permission.CAMERA)) {
-                    controller.setCameraPermissionGranted(true)
+                    controller.setCameraPermissionGranted(true, current.callData)
                 } else {
                     cameraLauncher.launch(Manifest.permission.CAMERA)
                 }

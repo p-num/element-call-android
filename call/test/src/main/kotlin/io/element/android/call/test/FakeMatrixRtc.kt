@@ -11,6 +11,7 @@ import io.element.android.call.api.rtc.MatrixRtcAudioLevel
 import io.element.android.call.api.rtc.MatrixRtcCall
 import io.element.android.call.api.rtc.MatrixRtcCallEnd
 import io.element.android.call.api.rtc.MatrixRtcCallEvent
+import io.element.android.call.api.rtc.MatrixRtcCallIntent
 import io.element.android.call.api.rtc.MatrixRtcCallKind
 import io.element.android.call.api.rtc.MatrixRtcCallStatus
 import io.element.android.call.api.rtc.MatrixRtcClient
@@ -89,19 +90,29 @@ class FakeMatrixRtcRoom(
         private set
     var lastKind: MatrixRtcCallKind? = null
         private set
+    var lastCallIntent: MatrixRtcCallIntent? = null
+        private set
     var shutdownCount = 0
         private set
 
-    override suspend fun joinCall(kind: MatrixRtcCallKind, applicationSlotId: String?): Result<MatrixRtcCall> {
+    override suspend fun joinCall(
+        kind: MatrixRtcCallKind,
+        applicationSlotId: String?,
+        callIntent: MatrixRtcCallIntent?,
+    ): Result<MatrixRtcCall> {
         joinCallCount++
         lastKind = kind
+        lastCallIntent = callIntent
         joinGate?.await()
         joinResult()?.let { return it }
         return Result.success(FakeMatrixRtcCall(roomId, "m.call#${applicationSlotId ?: "room"}").also { lastCall = it })
     }
 
+    var shutdownResult: suspend () -> Unit = {}
+
     override suspend fun shutdown() {
         shutdownCount++
+        shutdownResult()
     }
 }
 
@@ -180,10 +191,13 @@ class FakeMatrixRtcCall(
         }
     }
 
+    var leaveResult: suspend () -> Result<Unit> = { Result.success(Unit) }
+
     override suspend fun leave(reason: MatrixRtcLeaveReason?): Result<Unit> {
         leaveCount++
-        if (status.value !is MatrixRtcCallStatus.Ended) status.value = MatrixRtcCallStatus.Ended(MatrixRtcCallEnd.Left)
-        return Result.success(Unit)
+        return leaveResult().onSuccess {
+            if (status.value !is MatrixRtcCallStatus.Ended) status.value = MatrixRtcCallStatus.Ended(MatrixRtcCallEnd.Left)
+        }
     }
 
     override fun close() = Unit
@@ -197,6 +211,7 @@ class FakeMatrixRtcMediaSession(
 
     private val _events = MutableSharedFlow<MatrixRtcCallEvent>(extraBufferCapacity = 8)
     override val events: Flow<MatrixRtcCallEvent> = _events
+    override val isOwnMediaDegraded = MutableStateFlow(false)
 
     /**
      * Set directly for a roster with detail for everything, the core's default window; or through
@@ -332,9 +347,15 @@ class FakeMatrixRtcMediaSession(
     var switchCameraCount = 0
         private set
 
-    suspend fun emit(event: MatrixRtcCallEvent) = _events.emit(event)
+    suspend fun emit(event: MatrixRtcCallEvent) {
+        if (event is MatrixRtcCallEvent.OwnMediaConnectionState) isOwnMediaDegraded.value = event.degraded
+        _events.emit(event)
+    }
+
+    var publishMicrophoneResult: suspend () -> Result<Unit> = { Result.success(Unit) }
 
     override suspend fun publishMicrophone(muted: Boolean): Result<Unit> {
+        publishMicrophoneResult().getOrElse { return Result.failure(it) }
         publishMicrophoneCalls += muted
         // As the real one does: the publication carries the mute, so the flow reports it from the
         // moment the microphone is up rather than only once someone toggles the button.

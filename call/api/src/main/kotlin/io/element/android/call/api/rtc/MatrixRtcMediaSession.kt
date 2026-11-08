@@ -34,6 +34,9 @@ interface MatrixRtcMediaSession : AutoCloseable {
 
     val events: Flow<MatrixRtcCallEvent>
 
+    /** Current publishing-connection health; unrelated to Matrix sync or remote-focus outages. */
+    val isOwnMediaDegraded: StateFlow<Boolean>
+
     /**
      * The remote tiles, ranked and damped by the core. Pushed, and never republished unchanged.
      */

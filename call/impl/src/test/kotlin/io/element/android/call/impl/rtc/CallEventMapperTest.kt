@@ -15,6 +15,13 @@ import org.matrix.rtc.FfiCallEvent
 
 class CallEventMapperTest {
     @Test
+    fun `own publishing health crosses independently of aggregate health`() {
+        listOf(true, false).forEach { degraded ->
+            assertThat(FfiCallEvent.OwnMediaConnectionState(degraded).map()).isEqualTo(MatrixRtcCallEvent.OwnMediaConnectionState(degraded))
+        }
+    }
+
+    @Test
     fun `a join carries the count after it`() {
         val mapped = FfiCallEvent.ParticipantJoined(memberId = "bob", userId = "@bob:example.org", participantCount = 3u).map()
 

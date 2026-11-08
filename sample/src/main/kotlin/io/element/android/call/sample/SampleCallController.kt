@@ -122,8 +122,10 @@ class SampleCallController(private val context: Context, private val scope: Coro
         pictureInPictureEntryFlow.value = entry
     }
     override fun startCall(callData: ElementCallData) = target.startCall(callData)
-    override fun setMicrophonePermissionGranted(granted: Boolean) = target.setMicrophonePermissionGranted(granted)
-    override fun setCameraPermissionGranted(granted: Boolean) = target.setCameraPermissionGranted(granted)
+    override fun setMicrophonePermissionGranted(granted: Boolean, expectedCall: ElementCallData?) =
+        target.setMicrophonePermissionGranted(granted, expectedCall)
+    override fun setCameraPermissionGranted(granted: Boolean, expectedCall: ElementCallData?) =
+        target.setCameraPermissionGranted(granted, expectedCall)
     override fun setMicrophoneMuted(muted: Boolean) = target.setMicrophoneMuted(muted)
     override fun setCameraEnabled(enabled: Boolean) = target.setCameraEnabled(enabled)
     override fun switchCamera() = target.switchCamera()
@@ -151,4 +153,5 @@ class SampleCallController(private val context: Context, private val scope: Coro
     override fun sendReaction(kind: MatrixRtcReactionKind) = target.sendReaction(kind)
     override fun reportConnectivity(isOnline: Boolean) = target.reportConnectivity(isOnline)
     override fun hangUp() = target.hangUp()
+    override suspend fun hangUpAndWait(expectedCall: ElementCallData): Boolean = target.hangUpAndWait(expectedCall)
 }
