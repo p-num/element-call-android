@@ -53,7 +53,7 @@ dependencyResolutionManagement {
                 }
             }
             ivy {
-                url = uri("https://github.com/element-hq/matrix-rust-rtc/releases/download")
+                url = uri("https://github.com/p-num/matrix-rust-rtc/releases/download")
                 patternLayout { artifact("v[revision]/[artifact]-[revision].[ext]") }
                 metadataSources { artifact() }
                 content { includeModule("io.element.android", "matrix-rtc-android") }
