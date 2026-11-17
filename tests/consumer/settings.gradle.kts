@@ -29,14 +29,10 @@ dependencyResolutionManagement {
         val elementCallModules = listOf("element-call-bom", "element-call-api", "element-call", "element-call-ui", "element-call-test")
         val distDir = providers.gradleProperty("elementCallDistDir").orNull
         if (distDir == null) {
-            // Only the library comes from here, and the core when it is a local build (-PmatrixRtcLocalVersion);
-            // everything else from the repositories a host would have anyway.
+            // Only the library comes from here; the core's source is selected independently below.
             mavenLocal {
                 content {
                     elementCallModules.forEach { includeModule("io.element.android", it) }
-                    if (providers.gradleProperty("matrixRtcLocalVersion").isPresent) {
-                        includeModule("io.element.android", "matrix-rtc-android")
-                    }
                 }
             }
         } else {
@@ -51,6 +47,21 @@ dependencyResolutionManagement {
                     elementCallModules.forEach { includeModule("io.element.android", it) }
                 }
             }
+        }
+        // Exercise the same core source with locally published wrappers and with release assets.
+        exclusiveContent {
+            forRepository {
+                if (providers.gradleProperty("matrixRtcLocalVersion").isPresent) {
+                    mavenLocal()
+                } else {
+                    ivy {
+                        url = uri("https://github.com/p-num/matrix-rust-rtc/releases/download")
+                        patternLayout { artifact("v[revision]/[artifact]-[revision].[ext]") }
+                        metadataSources { artifact() }
+                    }
+                }
+            }
+            filter { includeModule("io.element.android", "matrix-rtc-android") }
         }
         google()
         mavenCentral()

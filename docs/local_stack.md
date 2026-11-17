@@ -20,8 +20,9 @@ matrix-rust-rtc  ──(1)──►  element-call-android  ──(2, 3)──►
 
 ## Layer 1: a locally built core in the library
 
-The `matrix-rust-rtc` core, `io.element.android:matrix-rtc-android`, comes from Maven Central at the version
-`matrix_rtc` in `gradle/libs.versions.toml`. Bumping the core is a pull request that changes that line.
+The `matrix-rust-rtc` core, `io.element.android:matrix-rtc-android`, comes from the Letro fork's GitHub release at
+the version `matrix_rtc` in `gradle/libs.versions.toml`. It resolves remotely as an artifact-only AAR, without a
+fetch step or a local file. Bumping the core is a pull request that changes that line after publishing the release.
 
 **Build the core and publish it locally**, to work on the core itself (from a sibling checkout of
 `matrix-rust-rtc`; prerequisites are listed in the script and in the core's `mobile/PACKAGING.md`). The script
@@ -40,9 +41,9 @@ Then build here with the property, on the command line or in `~/.gradle/gradle.p
 ./gradlew assemble -PmatrixRtcLocalVersion=0.0.0-local
 ```
 
-`settings.gradle.kts` turns it into a `mavenLocal()` repository filtered to the core and a version override for the
-catalog's `matrix_rtc`; without it, `mavenLocal()` is not declared at all. Republishing `0.0.0-local` is picked up by
-the next build: Gradle does not cache what it resolves from `mavenLocal()`.
+`settings.gradle.kts` selects a `mavenLocal()` repository exclusive to the core and overrides the catalog's
+`matrix_rtc`; without the property, only the core's GitHub release repository serves that coordinate.
+Republishing `0.0.0-local` is picked up by the next build: Gradle does not cache what it resolves from `mavenLocal()`.
 
 **Check which core is live:** Gradle prints `Note: resolving io.element.android:matrix-rtc-android 0.0.0-local from
 mavenLocal` at configuration. The unit test `MatrixRtcAarClasspathTest` in `call/impl` proves the AAR resolves and
@@ -68,8 +69,9 @@ or put `elementCallAndroidDir=/abs/path/element-call-android` in `~/.gradle/grad
 git. Gradle prints `Note: element-call-android from <path> (composite build)`.
 
 Layer 1 does not compose with layer 2 on its own: Element X resolves the core from its own repositories, so it gets
-the version this repository's catalog names, from Maven Central. To run a locally built core, add this ahead of
-`mavenCentral()` in Element X's `settings.gradle.kts`, without committing it, and pass
+the version this repository's catalog names, from the core fork's GitHub release. The host needs the core resolver
+shown in README, "Consuming a release". To run a locally built core, select this instead of the core's GitHub
+repository in Element X's `settings.gradle.kts`, without committing it, and pass
 `-PmatrixRtcLocalVersion=0.0.0-local` so that the included build asks for that version:
 
 ```kotlin
@@ -116,8 +118,9 @@ Element X's settings turn the property into a `mavenLocal()` repository filtered
 **Switch back:** drop the property.
 
 The library side exists: `publishToMavenLocal` publishes the four artifacts and the BOM through the
-`io.element.call.publish` plugin; their POMs name the core at the catalog's version, which Element X resolves from
-Maven Central. `tests/consumer` is a minified app built this way on every change, and, with `-PelementCallDistDir`,
+`io.element.call.publish` plugin; their POMs name the core at the catalog's version with an `aar` selector, which
+Element X resolves from the core fork's GitHub release. `tests/consumer` validates this remote core with locally
+published wrappers and, with `-PelementCallDistDir`,
 against a directory of release assets the way a host resolves a GitHub release (README, "Consuming a release"). Element X's `-PelementCallLocalVersion` property arrives with its integration pull requests
 (plan §10, PR 2).
 

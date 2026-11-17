@@ -35,13 +35,21 @@ dependencyResolutionManagement {
             metadataSources { gradleMetadata() }
             content { includeModule("org.matrix.rustcomponents", "sdk-android") }
         }
-        // A local build of the matrix-rust-rtc core, opt-in: publish it from matrix-rust-rtc with
-        // `./tools/rtc/build-rust-rtc`, then build here with -PmatrixRtcLocalVersion=0.0.0-local (docs/local_stack.md).
-        if (matrixRtcLocalVersion != null) {
-            logger.lifecycle("Note: resolving io.element.android:matrix-rtc-android $matrixRtcLocalVersion from mavenLocal")
-            mavenLocal {
-                content { includeModule("io.element.android", "matrix-rtc-android") }
+        // The Letro core release is a bare AAR. A local Maven publication remains opt-in (docs/local_stack.md).
+        exclusiveContent {
+            forRepository {
+                if (matrixRtcLocalVersion != null) {
+                    logger.lifecycle("Note: resolving io.element.android:matrix-rtc-android $matrixRtcLocalVersion from mavenLocal")
+                    mavenLocal()
+                } else {
+                    ivy {
+                        url = uri("https://github.com/p-num/matrix-rust-rtc/releases/download")
+                        patternLayout { artifact("v[revision]/[artifact]-[revision].[ext]") }
+                        metadataSources { artifact() }
+                    }
+                }
             }
+            filter { includeModule("io.element.android", "matrix-rtc-android") }
         }
     }
     versionCatalogs {

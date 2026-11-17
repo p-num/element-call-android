@@ -40,9 +40,7 @@ See [AGENTS.md](AGENTS.md) for the boundaries between them.
 
 ## Consuming a release
 
-The artifacts are on Maven Central, and so is the `matrix-rust-rtc` core they depend on,
-`io.element.android:matrix-rtc-android`. With `mavenCentral()` among the repositories, through the BOM so one
-version pins the four:
+Consume the wrapper through the BOM so one version pins the four artifacts:
 
 ```kotlin
 implementation(platform("io.element.android:element-call-bom:<version>"))
@@ -51,12 +49,14 @@ implementation("io.element.android:element-call")
 testImplementation("io.element.android:element-call-test")
 ```
 
-The core's version is fixed by the library's metadata; a host never names it. An unreleased build is consumed
-from the local Maven repository instead ([docs/local_stack.md](docs/local_stack.md), layer 3).
+The core's version is fixed by the library's metadata; a host never names it. This Letro fork resolves
+`io.element.android:matrix-rtc-android` from the [core fork's GitHub releases](https://github.com/p-num/matrix-rust-rtc/releases),
+which carry a bare AAR. Add the core's Ivy repository below even when resolving the wrapper from Maven Central.
+An unreleased wrapper build is consumed from the local Maven repository instead ([docs/local_stack.md](docs/local_stack.md), layer 3).
 
-**From a GitHub release instead.** Each [release](https://github.com/element-hq/element-call-android/releases) also
+**From a GitHub release instead.** Each [release](https://github.com/p-num/element-call-android/releases) also
 carries the artifacts as assets, with their module metadata, POMs and sources, and a `SHA256SUMS`, so that a build
-can resolve them straight from the release, a fork's included. The core still comes from Maven Central:
+can resolve them straight from the release:
 
 ```kotlin
 dependencyResolutionManagement {
@@ -73,6 +73,16 @@ dependencyResolutionManagement {
                 includeModule("io.element.android", "element-call-test")
             }
         }
+        exclusiveContent {
+            forRepository {
+                ivy {
+                    url = uri("https://github.com/p-num/matrix-rust-rtc/releases/download")
+                    patternLayout { artifact("v[revision]/[artifact]-[revision].[ext]") }
+                    metadataSources { artifact() }
+                }
+            }
+            filter { includeModule("io.element.android", "matrix-rtc-android") }
+        }
         google()
         mavenCentral()
     }
@@ -85,7 +95,7 @@ dependencyResolutionManagement {
 ./gradlew assemble test runQualityChecks
 ```
 
-The `matrix-rust-rtc` core comes from Maven Central, at the version in `gradle/libs.versions.toml`.
+The `matrix-rust-rtc` core comes from the Letro fork's GitHub release, at the version in `gradle/libs.versions.toml`.
 [docs/local_stack.md](docs/local_stack.md) explains how to build against a local core, and how to work on the core,
 this library and Element X at once.
 

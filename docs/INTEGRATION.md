@@ -49,12 +49,15 @@ The AAR contains four things, and you will end up depending on all four:
 | `org.matrix.rtc.MatrixRtc` | the loader that runs `JNI_OnLoad` — see §2 |
 | `libs/libwebrtc.jar` | libwebrtc's Java classes: camera and screen capture, I420 conversion, GL renderer |
 
-The Maven coordinate is `io.element.android:matrix-rtc-android`, on Maven Central. Its metadata brings JNA, the
-uniffi bindings runtime, as an AAR:
+The coordinate is `io.element.android:matrix-rtc-android`. The Letro fork publishes a bare AAR as a GitHub release
+asset, resolved through the artifact-only Ivy repository in `settings.gradle.kts` (and in a host, as shown in
+README, "Consuming a release"). Select the `aar` artifact explicitly and declare JNA, the uniffi bindings runtime,
+because the core release has no dependency metadata:
 
 ```kotlin
 // call/impl/build.gradle.kts
-api(libs.matrix.rtc.android)
+api(variantOf(libs.matrix.rtc.android) { artifactType("aar") })
+implementation(variantOf(libs.jna) { artifactType("aar") })
 ```
 
 **Confine the FFI to one package.** Nothing outside `call/impl/…/rtc` imports `org.matrix.rtc`. The

@@ -57,10 +57,11 @@ Package root: `io.element.android.call`. Distinct from Element X's packages so b
 
 ## Build and check
 
-The `matrix-rust-rtc` core, `io.element.android:matrix-rtc-android`, comes from Maven Central at the catalog's
-`matrix_rtc`. `./tools/rtc/build-rust-rtc` publishes a local build of it to `~/.m2`, and `-PmatrixRtcLocalVersion=0.0.0-local`
-builds against that. See [docs/local_stack.md](docs/local_stack.md) for the three layers (local core, library from
-source inside Element X, library as an AAR inside Element X).
+The `matrix-rust-rtc` core, `io.element.android:matrix-rtc-android`, comes from the Letro fork's GitHub release
+at the catalog's `matrix_rtc`. The release is a bare AAR, resolved through artifact-only Ivy with an explicit
+`aar` dependency selector. `./tools/rtc/build-rust-rtc` publishes a local build to `~/.m2`, and
+`-PmatrixRtcLocalVersion=0.0.0-local` selects that repository and version instead. See [docs/local_stack.md](docs/local_stack.md)
+for the three layers (local core, library from source inside Element X, library as an AAR inside Element X).
 
 - Build everything: `./gradlew assemble`
 - Unit tests: `./gradlew test`
