@@ -11,6 +11,7 @@ import io.element.android.call.api.audio.CallAudioDevice
 import io.element.android.call.api.rtc.MatrixRtcAudioLevel
 import io.element.android.call.api.rtc.MatrixRtcConnectionLossReason
 import io.element.android.call.api.rtc.MatrixRtcFrameEncryptionState
+import io.element.android.call.api.rtc.MatrixRtcMembership
 import io.element.android.call.api.rtc.MatrixRtcMembershipFormat
 import io.element.android.call.api.rtc.MatrixRtcReceiveStats
 import io.element.android.call.api.rtc.MatrixRtcSignallingHealth
@@ -74,6 +75,8 @@ data class ElementCallSnapshot(
      * than a claim that the call is empty.
      */
     val memberCount: Int = 0,
+    /** Current positive co-membership evidence, for the host's participation-scoped correlation. */
+    val participation: ElementCallParticipation? = null,
     /** Meter readings by member id, ours included: what we capture and what we decode. */
     val audioLevels: ImmutableMap<String, MatrixRtcAudioLevel> = persistentMapOf(),
     /**
@@ -205,6 +208,12 @@ data class ElementCallSnapshot(
             roster.order.none { it.id.kind == MatrixRtcTileKind.SCREEN_SHARE } &&
             roster.order.count { it.id.kind == MatrixRtcTileKind.PERSON } == 1
 }
+
+data class ElementCallParticipation(
+    val slotId: String,
+    val localMemberId: String,
+    val members: ImmutableList<MatrixRtcMembership>,
+)
 
 /** Which request on our hand failed. */
 enum class ElementCallHandRequestFailure {

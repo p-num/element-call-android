@@ -23,7 +23,7 @@ interface MatrixRtcCall : AutoCloseable {
     val roomId: RoomId
     val slotId: String
 
-    /** Our own MSC4143 member id, minted by the core for this join. */
+    /** Our own membership id. Correlation also requires the generation metadata in [members]. */
     val memberId: String
 
     /**
@@ -83,10 +83,8 @@ interface MatrixRtcCall : AutoCloseable {
 /**
  * One MSC4143 membership of an RTC session, as the core sees it.
  *
- * [memberId] is minted by the core, fresh for every join, and is what every sticky event, media
- * roster entry and frame-encryption report is keyed by. A device that rejoined without leaving
- * therefore appears under a new id; matching on [userId] and [deviceId] is the only way to
- * recognise it as the same device.
+ * [memberId] keys the media roster and frame-encryption reports. Its generation semantics depend on
+ * [identityKind]: legacy ids can be reused, and require [membershipTs] to distinguish joins.
  */
 data class MatrixRtcMembership(
     val memberId: String,
@@ -95,7 +93,17 @@ data class MatrixRtcMembership(
     val deviceId: String?,
     /** The MSC4143 application type, for instance `m.call`. Null when the membership did not say. */
     val application: String?,
+    /** Membership generation, supplied by the core rather than inferred from an id's spelling. */
+    val identityKind: MatrixRtcMembershipIdentityKind = MatrixRtcMembershipIdentityKind.UNAVAILABLE,
+    /** Legacy membership creation time. Missing means correlation must remain unbound. */
+    val membershipTs: ULong? = null,
 )
+
+enum class MatrixRtcMembershipIdentityKind {
+    PER_JOIN_MEMBER_ID,
+    LEGACY_MEMBERSHIP_TIMESTAMP,
+    UNAVAILABLE,
+}
 
 /**
  * Why we are leaving a call. [code] is the machine-readable MSC4143 reason.

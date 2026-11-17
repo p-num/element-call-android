@@ -16,6 +16,7 @@ import io.element.android.call.api.ElementCallHandRequestFailure
 import io.element.android.call.api.ElementCallInterruption
 import io.element.android.call.api.ElementCallLifecycleListener
 import io.element.android.call.api.ElementCallOptions
+import io.element.android.call.api.ElementCallParticipation
 import io.element.android.call.api.ElementCallPreferences
 import io.element.android.call.api.ElementCallPreferencesStore
 import io.element.android.call.api.ElementCallRoomContextProvider
@@ -768,6 +769,13 @@ internal class DefaultElementCallController(
 
     /** What the call reports from the join on, media or not: its status and the audio route. */
     private fun CoroutineScope.startJoinObservers(rtcCall: MatrixRtcCall, attempt: ElementCallAnalyticsReporter) = launch(start = CoroutineStart.UNDISPATCHED) {
+        launch(start = CoroutineStart.UNDISPATCHED) {
+            rtcCall.members.collect { members ->
+                updateState {
+                    it.copy(participation = ElementCallParticipation(rtcCall.slotId, rtcCall.memberId, members.toImmutableList()))
+                }
+            }
+        }
         observeStatus(rtcCall, attempt)
         // Observed rather than echoed back from selectAudioDevice, because the route also changes
         // without us asking: a headset is unplugged, or the platform overrides the choice.

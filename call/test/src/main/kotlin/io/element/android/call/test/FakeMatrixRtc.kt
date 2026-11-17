@@ -113,7 +113,8 @@ class FakeMatrixRtcRoom(
         lastCallIntent = callIntent
         joinGate?.await()
         joinResult()?.let { return it }
-        return Result.success(FakeMatrixRtcCall(roomId, "m.call#${applicationSlotId ?: "room"}", kind.startedIntent() ?: callIntent).also { lastCall = it })
+        val intent = kind.startedIntent() ?: callIntent ?: MatrixRtcCallIntent.VIDEO
+        return Result.success(FakeMatrixRtcCall(roomId, "m.call#${applicationSlotId ?: "room"}", intent).also { lastCall = it })
     }
 
     var shutdownResult: suspend () -> Unit = {}

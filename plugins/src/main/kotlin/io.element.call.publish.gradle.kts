@@ -10,7 +10,7 @@ import com.vanniktech.maven.publish.JavaPlatform
 import com.vanniktech.maven.publish.JavadocJar
 import com.vanniktech.maven.publish.SourcesJar
 
-/**
+/*
  * This will generate the plugin "io.element.call.publish", applied on every published module and on
  * the BOM. One publish command for five artifacts and one version (plan §8.3).
  *

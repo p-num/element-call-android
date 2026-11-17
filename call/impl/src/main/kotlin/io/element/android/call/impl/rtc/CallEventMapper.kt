@@ -20,6 +20,7 @@ import io.element.android.call.api.rtc.MatrixRtcKeyRejection
 import io.element.android.call.api.rtc.MatrixRtcLocalState
 import io.element.android.call.api.rtc.MatrixRtcMediaPhase
 import io.element.android.call.api.rtc.MatrixRtcMembership
+import io.element.android.call.api.rtc.MatrixRtcMembershipIdentityKind
 import io.element.android.call.api.rtc.MatrixRtcReceiveStats
 import io.element.android.call.api.rtc.MatrixRtcRingPhase
 import io.element.android.call.api.rtc.MatrixRtcSignallingHealth
@@ -44,6 +45,7 @@ import org.matrix.rtc.FfiInterruptions
 import org.matrix.rtc.FfiKeyRejection
 import org.matrix.rtc.FfiLocalState
 import org.matrix.rtc.FfiMediaPhase
+import org.matrix.rtc.FfiMembershipIdentityKind
 import org.matrix.rtc.FfiReceiveStats
 import org.matrix.rtc.FfiRingPhase
 import org.matrix.rtc.FfiSignallingHealth
@@ -106,6 +108,12 @@ internal fun JoinedMembership.map() = MatrixRtcMembership(
     userId = UserId(sender),
     deviceId = senderDeviceId,
     application = application,
+    membershipTs = membershipTs,
+    identityKind = when (identityKind) {
+        FfiMembershipIdentityKind.PER_JOIN_MEMBER_ID -> MatrixRtcMembershipIdentityKind.PER_JOIN_MEMBER_ID
+        FfiMembershipIdentityKind.LEGACY_MEMBERSHIP_TIMESTAMP -> MatrixRtcMembershipIdentityKind.LEGACY_MEMBERSHIP_TIMESTAMP
+        FfiMembershipIdentityKind.UNAVAILABLE -> MatrixRtcMembershipIdentityKind.UNAVAILABLE
+    },
 )
 
 internal fun FfiFrameEncryptionState.map(): MatrixRtcFrameEncryptionState = when (this) {

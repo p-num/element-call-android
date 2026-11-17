@@ -78,9 +78,8 @@ changelog reaches `main` afterwards through an ordinary reviewed pull request. T
 - **Minor** (`0.2.1` → `0.3.0`) for anything else. At `0.x` this is also where breaking changes go, which is why
   every such pull request wants the `pr-api` label: `.github/release.yml` gives it its own "⚠️ API Changes"
   heading precisely so a host reads it before bumping.
-- **A prerelease** (`0.3.0-rc.1`) when a host should try it first. The core this library pins (`MATRIX_RTC_VERSION`
-  in `gradle.properties`) is itself a prerelease; a stable version here would present that edge as settled, so
-  **the first stable release waits for the core to reach one.** Until then, release `0.1.0-rc.N`.
+- **A prerelease** (`0.3.0-rc.1`) when a host should try it first. Check the exact core pinned as `matrix_rtc`
+  in `gradle/libs.versions.toml`, including any Letro changes it must contain, before choosing a release.
 
 ### 2. Dry run
 
@@ -222,26 +221,17 @@ release is immutable and public and three things have to be in place first:
   artifacts are already under it), as the secrets `MAVEN_CENTRAL_USERNAME` and `MAVEN_CENTRAL_PASSWORD`.
 - **A signing key**, as `MAVEN_SIGNING_KEY` (the armoured private key) and `MAVEN_SIGNING_KEY_PASSWORD`. Signing is
   off by default so a local publish needs no key; `-PRELEASE_SIGNING_ENABLED=true` turns it on.
-- **A core artifact on Central.** The `element-call` POM depends on `io.element.android:matrix-rtc-android`, which
-  `element-hq/matrix-rust-rtc` publishes to GitHub Packages (a token even to read) and attaches to its GitHub
-  release, not yet to Maven Central. A Central release of `element-call` would resolve for a host only with the Ivy
-  repository over that release added by hand, which is what a Central release exists to avoid. Until the core is on
-  Central (`docs/FEEDBACK.md` item 29), the gate stays closed and the exit condition of the plan's L4 - "resolves
-  from Maven Central in a clean project" - is not met.
+- **The compatible core artifact on Central.** The upstream `0.5.0` core is on Central. The membership-generation
+  adapter requires rebuilt bindings and a matching native binary containing `membershipTs` and `identityKind`;
+  that source candidate has no assigned release here. Publish and pin that compatible core before releasing this adapter.
 
-Two more things a first release should say out loud in its notes: the Element Call compatibility is pinned to the
-state-event generation while the library builds against the released SDK (`docs/FEEDBACK.md`), and the core is a
-prerelease.
+Release notes must state the exact compatible core and any host API migration (`CHANGES.md`).
 
 ## What must never be published
 
-`rtc/local` publishes the core AAR in place to the **local** Maven repository as
-`io.element.android:matrix-rtc-android:<MATRIX_RTC_VERSION>`, the core's own coordinate, so that `tests/consumer`
-and a host on layer 3 resolve the dependency the library's POMs name. That project has no remote repository
-configured, on purpose: the artifact is the core's to publish, and a copy of it, or a local build under its name,
-must never appear on Central from this repository, nor among this repository's release assets (the release script
-only ever publishes the modules on the `io.element.call.publish` plugin, which `rtc/local` is not). When the core
-is on Central, this publication and the Ivy repository in `settings.gradle.kts` go, and nothing else changes.
+`tools/rtc/build-rust-rtc` can publish a local core to the local Maven repository for development
+(`docs/local_stack.md`). A local core build must never appear on Central from this repository, or among this
+repository's release assets. Only the RTC repository publishes its own releases.
 
 ## Repository setup
 

@@ -12,6 +12,8 @@ actually read it. The matrix-rust-rtc core's own history is the core's:
 
 ## Unreleased
 
+- Host correlation can observe `ElementCallSnapshot.participation`, with core-provided membership identity kind and optional
+  legacy generation timestamp. This adapter requires rebuilt RTC bindings containing both fields; existing binaries cannot supply them.
 - The call settings (feature-hq 043). `ElementCallOptions.membershipFormat` is removed: the format is a device preference,
   `ElementCallPreferencesStore.membershipFormat`, Room state until the user changes it in Developer options. A host
   that chose the format passes its own store to `ElementCallStack.Builder.preferencesStore`.
@@ -30,33 +32,6 @@ actually read it. The matrix-rust-rtc core's own history is the core's:
   stack's scope, or the call's end is not reported.
 - `ElementCallFailure.JoinRefused` is a class carrying the homeserver's `errcode`: a host matching it by value matches by
   type. `MatrixRtcJoinException` gains `SlotClosed`, for a host with its own RTC client.
-
-## 0.1.0-rc.10-letro.1 - 2026-11-08
-
-- Permission setters accept their original `ElementCallData`; hosts must pass it to reject late answers for replaced calls.
-- `MatrixRtcRoom.joinCall` accepts the membership media intent independently of ringing or announcements.
-- Hosts can await `ElementCallController.hangUpAndWait` for an exact call attempt before switching calls.
-- `MatrixRtcMediaSession` implementations provide `isOwnMediaDegraded`; `ElementCallSnapshot.isMediaConnected` reports
-  confirmed local publication and current publishing health separately from roster membership.
-- The shared RTC dependency is `0.5.0-rc.9-letro.2`; hosts resolve its Android AAR from the Letro RTC release, including the late-connect cancellation fix.
-
-- `ElementCallIcons` gains `reaction`, the control bar's way into the reaction picker: a host passing its own icons maps
-  Compound's `reactionSolid`. `ElementCallColors` gains `borderInteractiveSecondary`, defaulted: a host passing its own
-  colours maps Compound's.
-- `ElementCallController` gains `reactionCatalogue` and `sendReaction`, and `MatrixRtcCall` gains `sendReaction`: a
-  controller or call of the host's own implements them.
-
-
-
-### What's Changed
-
-⚠️ API Changes
-* Keep native call status and departure tied to the active attempt by @ehsunahmadi in https://github.com/p-num/element-call-android/pull/2
-
-### New Contributors
-* @ehsunahmadi made their first contribution in https://github.com/p-num/element-call-android/pull/1
-
-**Full Changelog**: https://github.com/p-num/element-call-android/commits/v0.1.0-rc.10-letro.1
 
 ## 0.1.1 - 2026-11-12
 
@@ -117,6 +92,33 @@ actually read it. The matrix-rust-rtc core's own history is the core's:
 
 
 **Full Changelog**: https://github.com/element-hq/element-call-android/compare/v0.1.0-rc.10...v0.1.0-rc.11
+
+## 0.1.0-rc.10-letro.1 - 2026-11-08
+
+- Permission setters accept their original `ElementCallData`; hosts must pass it to reject late answers for replaced calls.
+- `MatrixRtcRoom.joinCall` accepts the membership media intent independently of ringing or announcements.
+- Hosts can await `ElementCallController.hangUpAndWait` for an exact call attempt before switching calls.
+- `MatrixRtcMediaSession` implementations provide `isOwnMediaDegraded`; `ElementCallSnapshot.isMediaConnected` reports
+  confirmed local publication and current publishing health separately from roster membership.
+- The shared RTC dependency is `0.5.0-rc.9-letro.2`; hosts resolve its Android AAR from the Letro RTC release, including the late-connect cancellation fix.
+
+- `ElementCallIcons` gains `reaction`, the control bar's way into the reaction picker: a host passing its own icons maps
+  Compound's `reactionSolid`. `ElementCallColors` gains `borderInteractiveSecondary`, defaulted: a host passing its own
+  colours maps Compound's.
+- `ElementCallController` gains `reactionCatalogue` and `sendReaction`, and `MatrixRtcCall` gains `sendReaction`: a
+  controller or call of the host's own implements them.
+
+
+
+### What's Changed
+
+⚠️ API Changes
+* Keep native call status and departure tied to the active attempt by @ehsunahmadi in https://github.com/p-num/element-call-android/pull/2
+
+### New Contributors
+* @ehsunahmadi made their first contribution in https://github.com/p-num/element-call-android/pull/1
+
+**Full Changelog**: https://github.com/p-num/element-call-android/commits/v0.1.0-rc.10-letro.1
 
 ## 0.1.0-rc.10 - 2026-11-04
 
