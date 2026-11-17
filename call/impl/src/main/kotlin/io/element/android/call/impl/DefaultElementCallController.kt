@@ -733,7 +733,7 @@ internal class DefaultElementCallController(
         if (kind is MatrixRtcCallKind.Direct && kind.ring != null) {
             updateState { it.copy(connection = ElementCallConnection.Calling(callee = null, isRinging = false)) }
         }
-        val joined = room.joinCall(kind = kind, callIntent = intent).getOrElse {
+        val joined = room.joinCall(kind = kind, requestedIntent = intent.takeIf { callData.hasExplicitCallIntent }).getOrElse {
             val report = FailureReport.joinFailed(it)
             when (it) {
                 is MatrixRtcJoinException.TimedOut -> fail(attempt, report, ElementCallFailure.JoinTimedOut, "Join failed: ${it.message}")

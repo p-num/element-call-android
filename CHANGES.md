@@ -12,6 +12,8 @@ actually read it. The matrix-rust-rtc core's own history is the core's:
 
 ## Unreleased
 
+- Hosts set `ElementCallData.hasExplicitCallIntent` for incoming answers; it defaults to `isStartingCall`, so generic
+  room joins follow the existing call's media intent. `MatrixRtcRoom.joinCall` renames `callIntent` to `requestedIntent`.
 - `ElementCallAnalytics.forAttempt` can bind a receiver to one accepted `ElementCallData` before its first event; the
   default returns the existing receiver. The reporter retains that exact receiver through teardown and replacement.
 - Host correlation can observe `ElementCallSnapshot.participation`, with core-provided membership identity kind and optional

@@ -24,4 +24,6 @@ data class ElementCallData(
      * whether the room has a call: a call that ended a moment ago would turn an answer into a call back.
      */
     val isStartingCall: Boolean,
+    /** True when [isAudioCall] is an explicit start or answer choice; false for a generic room join. */
+    val hasExplicitCallIntent: Boolean = isStartingCall,
 )

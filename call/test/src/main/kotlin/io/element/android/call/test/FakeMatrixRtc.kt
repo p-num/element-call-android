@@ -49,8 +49,8 @@ class FakeMatrixRtcClient(
     private val joinResult: () -> Result<MatrixRtcCall>? = { null },
     /** Completed by a test to let a join return; a join waits on it while it is pending. */
     private val joinGate: CompletableDeferred<Unit>? = null,
-    /** What a call joined here settles on when we did not start it, as the core would from its members. */
-    private val callIntent: MatrixRtcCallIntent = MatrixRtcCallIntent.VIDEO,
+    /** What the existing call's members agree on, when they agree on a known intent. */
+    private val callIntent: MatrixRtcCallIntent? = null,
     /** What [supportedVideoCodecs] answers: the codecs "this device" can encode. */
     var videoCodecs: List<MatrixRtcVideoCodec> = listOf(MatrixRtcVideoCodec.VP8, MatrixRtcVideoCodec.H264, MatrixRtcVideoCodec.VP9),
 ) : MatrixRtcClient {
@@ -90,7 +90,7 @@ class FakeMatrixRtcRoom(
     override val roomId: RoomId,
     private val joinResult: () -> Result<MatrixRtcCall>? = { null },
     private val joinGate: CompletableDeferred<Unit>? = null,
-    private val callIntent: MatrixRtcCallIntent = MatrixRtcCallIntent.VIDEO,
+    private val callIntent: MatrixRtcCallIntent? = null,
 ) : MatrixRtcRoom {
     var joinCallCount = 0
         private set
@@ -106,14 +106,14 @@ class FakeMatrixRtcRoom(
     override suspend fun joinCall(
         kind: MatrixRtcCallKind,
         applicationSlotId: String?,
-        callIntent: MatrixRtcCallIntent?,
+        requestedIntent: MatrixRtcCallIntent?,
     ): Result<MatrixRtcCall> {
         joinCallCount++
         lastKind = kind
-        lastCallIntent = callIntent
+        lastCallIntent = requestedIntent
         joinGate?.await()
         joinResult()?.let { return it }
-        val intent = kind.startedIntent() ?: callIntent ?: MatrixRtcCallIntent.VIDEO
+        val intent = requestedIntent ?: kind.startedIntent() ?: callIntent ?: MatrixRtcCallIntent.VIDEO
         return Result.success(FakeMatrixRtcCall(roomId, "m.call#${applicationSlotId ?: "room"}", intent).also { lastCall = it })
     }
 

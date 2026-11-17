@@ -27,8 +27,8 @@ interface MatrixRtcCall : AutoCloseable {
     val memberId: String
 
     /**
-     * Voice or video, as the join settled it: the intent we started the call with, else the one the members
-     * already in it agree on. Start the camera for [MatrixRtcCallIntent.VIDEO] only.
+     * Voice or video, as the join settled it: the user's explicit choice, else the one the members already in it
+     * agree on, else video. Start the camera for [MatrixRtcCallIntent.VIDEO] only.
      */
     val intent: MatrixRtcCallIntent
 

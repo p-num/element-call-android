@@ -1000,6 +1000,7 @@ class DefaultElementCallControllerTest {
         controller.setMicrophonePermissionGranted(true)
         runCurrent()
 
+        assertThat(rtcClient.lastRoom?.lastCallIntent).isNull()
         assertThat(audioDevices.lastPreferLoudspeaker).isFalse()
     }
 
@@ -1245,6 +1246,33 @@ class DefaultElementCallControllerTest {
         assertThat(controller.state.value?.isCameraEnabled).isFalse()
     }
 
+    @Test
+    fun `an explicit answer chooses its media intent over the existing call`() = runTest {
+        for (isAudioCall in listOf(false, true)) {
+            val chosenIntent = if (isAudioCall) MatrixRtcCallIntent.AUDIO else MatrixRtcCallIntent.VIDEO
+            val existingIntent = if (isAudioCall) MatrixRtcCallIntent.VIDEO else MatrixRtcCallIntent.AUDIO
+            val rtcClient = FakeMatrixRtcClient(callIntent = existingIntent)
+            val audioDevices = FakeCallAudioDeviceController(initialDevices = listOf(anEarpiece(), aSpeaker()))
+            val controller = createController(
+                rtcClient = rtcClient,
+                audioDeviceController = audioDevices,
+                isAudioCall = isAudioCall,
+                isStartingCall = false,
+                hasExplicitCallIntent = true,
+            )
+            controller.setCameraPermissionGranted(true)
+            controller.setMicrophonePermissionGranted(true)
+            runCurrent()
+
+            assertThat(rtcClient.lastRoom?.lastCallIntent).isEqualTo(chosenIntent)
+            assertThat(rtcClient.lastCall?.intent).isEqualTo(chosenIntent)
+            assertThat(audioDevices.lastPreferLoudspeaker).isEqualTo(!isAudioCall)
+            assertThat(controller.state.value?.isCameraEnabled).isEqualTo(!isAudioCall)
+            controller.hangUp()
+            runCurrent()
+        }
+    }
+
     /**
      * Joining from a room's call button asks for video, because the button cannot know what is in progress; the core
      * does, from the members, and a voice call has to join with the camera off.
@@ -1259,6 +1287,7 @@ class DefaultElementCallControllerTest {
         runCurrent()
 
         assertThat(controller.state.value?.connection).isEqualTo(ElementCallConnection.Connected)
+        assertThat(rtcClient.lastCall?.intent).isEqualTo(MatrixRtcCallIntent.AUDIO)
         assertThat(rtcClient.lastCall?.lastMediaSession?.cameraEnabledCalls).isEmpty()
         assertThat(controller.state.value?.isCameraEnabled).isFalse()
     }
@@ -2341,12 +2370,18 @@ class DefaultElementCallControllerTest {
     }
 
     @Test
-    fun `every call publishes its media intent including quiet Direct and group joins`() = runTest {
+    fun `explicit media choices reach quiet Direct and group joins`() = runTest {
         for (isDm in listOf(false, true)) {
             for (starts in listOf(false, true)) {
                 for (audio in listOf(false, true)) {
                     val rtc = FakeMatrixRtcClient()
-                    val controller = createController(rtcClient = rtc, roomIsDm = isDm, isStartingCall = starts, isAudioCall = audio)
+                    val controller = createController(
+                        rtcClient = rtc,
+                        roomIsDm = isDm,
+                        isStartingCall = starts,
+                        isAudioCall = audio,
+                        hasExplicitCallIntent = true,
+                    )
                     controller.setMicrophonePermissionGranted(true)
                     runCurrent()
                     assertThat(rtc.lastRoom?.lastCallIntent).isEqualTo(if (audio) MatrixRtcCallIntent.AUDIO else MatrixRtcCallIntent.VIDEO)
@@ -2359,6 +2394,23 @@ class DefaultElementCallControllerTest {
                     runCurrent()
                 }
             }
+        }
+    }
+
+    @Test
+    fun `generic Direct and group joins defer their media intent to the call`() = runTest {
+        for (isDm in listOf(false, true)) {
+            val rtcClient = FakeMatrixRtcClient(callIntent = MatrixRtcCallIntent.AUDIO)
+            val controller = createController(rtcClient = rtcClient, roomIsDm = isDm, isStartingCall = false, isAudioCall = false)
+            controller.setCameraPermissionGranted(true)
+            controller.setMicrophonePermissionGranted(true)
+            runCurrent()
+
+            assertThat(rtcClient.lastRoom?.lastCallIntent).isNull()
+            assertThat(rtcClient.lastCall?.intent).isEqualTo(MatrixRtcCallIntent.AUDIO)
+            assertThat(controller.state.value?.isCameraEnabled).isFalse()
+            controller.hangUp()
+            runCurrent()
         }
     }
 
@@ -2550,6 +2602,7 @@ class DefaultElementCallControllerTest {
         lifecycleListener: FakeElementCallLifecycleListener = FakeElementCallLifecycleListener(),
         isAudioCall: Boolean = true,
         isStartingCall: Boolean = true,
+        hasExplicitCallIntent: Boolean = isStartingCall,
         ringLifetime: Duration? = null,
         roomIsDm: Boolean? = false,
         roomContextProvider: FakeElementCallRoomContextProvider = FakeElementCallRoomContextProvider(
@@ -2579,7 +2632,14 @@ class DefaultElementCallControllerTest {
             preferencesStore = preferencesStore,
             analytics = NoOpElementCallAnalytics,
         )
-        controller.startCall(ElementCallData(roomId = A_ROOM_ID, isAudioCall = isAudioCall, isStartingCall = isStartingCall))
+        controller.startCall(
+            ElementCallData(
+                roomId = A_ROOM_ID,
+                isAudioCall = isAudioCall,
+                isStartingCall = isStartingCall,
+                hasExplicitCallIntent = hasExplicitCallIntent,
+            )
+        )
         runCurrent()
         return controller
     }

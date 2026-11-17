@@ -21,13 +21,13 @@ interface MatrixRtcRoom {
      * @param kind a group call or a DM call, with what it sends. Required: a default of a quiet group call
      * would let a caller that forgot to say DM place a call nobody notices.
      * @param applicationSlotId the MSC4143 application slot id; null is the room-wide call, `m.call#room`.
-     * @param callIntent media intent for the membership, including a quiet Join.
+     * @param requestedIntent the user's explicit media choice; null follows the existing call, defaulting to video.
      * @return a [MatrixRtcJoinException] when the core gave the join up.
      */
     suspend fun joinCall(
         kind: MatrixRtcCallKind,
         applicationSlotId: String? = null,
-        callIntent: MatrixRtcCallIntent? = null,
+        requestedIntent: MatrixRtcCallIntent? = null,
     ): Result<MatrixRtcCall>
 
     /** Leave any call still joined here, then stop following the room. */
