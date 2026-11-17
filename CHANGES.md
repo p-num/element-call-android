@@ -12,7 +12,24 @@ actually read it. The matrix-rust-rtc core's own history is the core's:
 
 ## Unreleased
 
-_Nothing yet._
+- The call settings (feature-hq 043). `ElementCallOptions.membershipFormat` is removed: the format is a device preference,
+  `ElementCallPreferencesStore.membershipFormat`, Room state until the user changes it in Developer options. A host
+  that chose the format passes its own store to `ElementCallStack.Builder.preferencesStore`.
+- `ElementCallPreferencesStore` replaces `reactions` with `showsReactions` and `playsReactionSounds`, and gains
+  `membershipFormat` and `videoCodec`; `ElementCallReactionsPreference` is removed. A store of the host's own implements
+  them. The old On / Silent / Off value is not carried over: everyone starts with reactions shown with their sound.
+- `ElementCallController` replaces `setReactionsPreference` with `setShowsReactions` and `setPlaysReactionSounds`, and
+  gains `setMembershipFormat`, `setVideoCodec` and `videoCodecs`. `MatrixRtcClient` gains `supportedVideoCodecs()` and
+  `MatrixRtcCall.connectMedia` a `videoCodec`, for a host with its own RTC client. `ElementCallFailure.Other` gains
+  `isJoinFailure`.
+- `ElementCallIcons` gains `settings` (Compound's settings-solid) and `developerOptions` (Compound's advanced-settings),
+  with no defaults: a host constructing it passes both, Element X from `CompoundIcons`.
+- Native call analytics (feature-hq 044). `ElementCallStack.Builder.analytics` takes an `ElementCallAnalytics`, which
+  receives four events per call (`ElementCallAnalyticsEvent`); the default, `NoOpElementCallAnalytics`, drops them. A host
+  forwards each event's `name` and `properties` unchanged, with the user's analytics consent. Hang up before cancelling the
+  stack's scope, or the call's end is not reported.
+- `ElementCallFailure.JoinRefused` is a class carrying the homeserver's `errcode`: a host matching it by value matches by
+  type. `MatrixRtcJoinException` gains `SlotClosed`, for a host with its own RTC client.
 
 ## 0.1.0-rc.10-letro.1 - 2026-11-08
 
@@ -40,6 +57,66 @@ _Nothing yet._
 * @ehsunahmadi made their first contribution in https://github.com/p-num/element-call-android/pull/1
 
 **Full Changelog**: https://github.com/p-num/element-call-android/commits/v0.1.0-rc.10-letro.1
+
+## 0.1.1 - 2026-11-12
+
+
+
+### What's Changed
+
+🧱 Build
+* Always publish a release to Maven Central, with a skip_maven_central input for recovery by @BillCarsonFr in https://github.com/element-hq/element-call-android/pull/90
+
+
+**Full Changelog**: https://github.com/element-hq/element-call-android/compare/v0.1.0...v0.1.1
+
+## 0.1.0 - 2026-11-12
+
+- Core: matrix-rust-rtc `0.5.0`, from Maven Central. A host drops its Ivy repository over the core's GitHub release;
+  `mavenCentral()` resolves the core and the JNA it needs.
+
+
+
+### What's Changed
+
+🧱 Build
+* Resolve the matrix-rust-rtc core from Maven Central by @BillCarsonFr in https://github.com/element-hq/element-call-android/pull/87
+
+
+**Full Changelog**: https://github.com/element-hq/element-call-android/compare/v0.1.0-rc.11...v0.1.0
+
+## 0.1.0-rc.11 - 2026-11-10
+
+- `ElementCallFailure` gains `MicrophoneRefused`: an exhaustive `when` over it needs the case.
+- A refused microphone now fails the call with `Failed(ElementCallFailure.MicrophoneRefused)`, no longer `Failed(Other(...))`.
+- `ElementCallNavigator` gains `openAppSettings()`: a host drawing `ElementCallScreen` with its own navigator implements it.
+- `MatrixRtcCall` gains `intent`, voice or video as the join settled it: a call of the host's own implements it.
+- Core: matrix-rust-rtc `0.5.0-rc.11`; a host's Ivy repository must point at the `v0.5.0-rc.11` asset.
+  `MatrixRtcConnectionLossReason` gains `TOKEN_ENDPOINT_UNSUPPORTED`, the homeserver offering no `get_token`.
+- The reference `SdkMatrixBackend.livekitToken` now makes the `get_token` request itself, as a workaround until the
+  SDK bindings expose it (matrix-org/matrix-rust-sdk#7428); copy it to join MSC calls and `url`-only transports.
+- `ElementCallIcons` gains `reaction`, the control bar's way into the reaction picker: a host passing its own icons maps
+  Compound's `reactionSolid`. `ElementCallColors` gains `borderInteractiveSecondary`, defaulted: a host passing its own
+  colours maps Compound's.
+- `ElementCallController` gains `reactionCatalogue` and `sendReaction`, and `MatrixRtcCall` gains `sendReaction`: a
+  controller or call of the host's own implements them.
+
+
+
+### What's Changed
+
+✨ Features
+* Support sending reactions 🎉 by @BillCarsonFr in https://github.com/element-hq/element-call-android/pull/81
+* Gracefully handle microphone and camera permissions by @BillCarsonFr in https://github.com/element-hq/element-call-android/pull/85
+
+🐛 Bugfixes
+* Joining a voice call from the room no longer turns the camera on by @BillCarsonFr in https://github.com/element-hq/element-call-android/pull/83
+
+🧱 Build
+* Bump matrix-rust-rtc to 0.5.0-rc.11 by @BillCarsonFr in https://github.com/element-hq/element-call-android/pull/84
+
+
+**Full Changelog**: https://github.com/element-hq/element-call-android/compare/v0.1.0-rc.10...v0.1.0-rc.11
 
 ## 0.1.0-rc.10 - 2026-11-04
 

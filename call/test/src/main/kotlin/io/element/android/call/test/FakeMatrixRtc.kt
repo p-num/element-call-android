@@ -31,6 +31,7 @@ import io.element.android.call.api.rtc.MatrixRtcStreamKind
 import io.element.android.call.api.rtc.MatrixRtcStreamRef
 import io.element.android.call.api.rtc.MatrixRtcTileId
 import io.element.android.call.api.rtc.MatrixRtcTileRoster
+import io.element.android.call.api.rtc.MatrixRtcVideoCodec
 import io.element.android.call.api.rtc.MatrixRtcVideoConstraints
 import io.element.android.call.api.rtc.MatrixRtcVideoFrame
 import io.element.android.call.api.rtc.id.RoomId
@@ -48,6 +49,10 @@ class FakeMatrixRtcClient(
     private val joinResult: () -> Result<MatrixRtcCall>? = { null },
     /** Completed by a test to let a join return; a join waits on it while it is pending. */
     private val joinGate: CompletableDeferred<Unit>? = null,
+    /** What a call joined here settles on when we did not start it, as the core would from its members. */
+    private val callIntent: MatrixRtcCallIntent = MatrixRtcCallIntent.VIDEO,
+    /** What [supportedVideoCodecs] answers: the codecs "this device" can encode. */
+    var videoCodecs: List<MatrixRtcVideoCodec> = listOf(MatrixRtcVideoCodec.VP8, MatrixRtcVideoCodec.H264, MatrixRtcVideoCodec.VP9),
 ) : MatrixRtcClient {
     var roomCount = 0
         private set
@@ -71,11 +76,13 @@ class FakeMatrixRtcClient(
         connectivityReports += isOnline
     }
 
+    override fun supportedVideoCodecs(): List<MatrixRtcVideoCodec> = videoCodecs
+
     override suspend fun room(roomId: RoomId, format: MatrixRtcMembershipFormat): Result<MatrixRtcRoom> {
         roomCount++
         lastMembershipFormat = format
         roomResult()?.let { return it }
-        return Result.success(FakeMatrixRtcRoom(roomId, joinResult, joinGate).also { lastRoom = it })
+        return Result.success(FakeMatrixRtcRoom(roomId, joinResult, joinGate, callIntent).also { lastRoom = it })
     }
 }
 
@@ -83,6 +90,7 @@ class FakeMatrixRtcRoom(
     override val roomId: RoomId,
     private val joinResult: () -> Result<MatrixRtcCall>? = { null },
     private val joinGate: CompletableDeferred<Unit>? = null,
+    private val callIntent: MatrixRtcCallIntent = MatrixRtcCallIntent.VIDEO,
 ) : MatrixRtcRoom {
     var joinCallCount = 0
         private set
@@ -105,7 +113,7 @@ class FakeMatrixRtcRoom(
         lastCallIntent = callIntent
         joinGate?.await()
         joinResult()?.let { return it }
-        return Result.success(FakeMatrixRtcCall(roomId, "m.call#${applicationSlotId ?: "room"}").also { lastCall = it })
+        return Result.success(FakeMatrixRtcCall(roomId, "m.call#${applicationSlotId ?: "room"}", kind.startedIntent() ?: callIntent).also { lastCall = it })
     }
 
     var shutdownResult: suspend () -> Unit = {}
@@ -116,9 +124,16 @@ class FakeMatrixRtcRoom(
     }
 }
 
+/** The intent a call is started with; a join into a call in progress has none, and takes its members'. */
+private fun MatrixRtcCallKind.startedIntent(): MatrixRtcCallIntent? = when (this) {
+    is MatrixRtcCallKind.Group -> notify?.intent
+    is MatrixRtcCallKind.Direct -> ring?.intent
+}
+
 class FakeMatrixRtcCall(
     override val roomId: RoomId,
     override val slotId: String,
+    override val intent: MatrixRtcCallIntent = MatrixRtcCallIntent.VIDEO,
 ) : MatrixRtcCall {
     override val memberId: String = "aLocalMemberId"
     override val members = MutableStateFlow(emptyList<MatrixRtcMembership>())
@@ -175,17 +190,24 @@ class FakeMatrixRtcCall(
     /** Called as media is asked for, before it connects: what a test checks has happened by then. */
     var onConnectMedia: () -> Unit = {}
 
+    /** What [connectMedia] fails with instead of connecting; null connects. */
+    var connectMediaFailure: Throwable? = null
+
     /** The session [connectMedia] connects: a harness gives it pictures and our own tile. */
     var newMediaSession: () -> FakeMatrixRtcMediaSession = { FakeMatrixRtcMediaSession() }
 
     /** What the last [connectMedia] asked for. */
     var lastIsSfuFallbackEnabled: Boolean? = null
         private set
+    var lastVideoCodec: MatrixRtcVideoCodec? = null
+        private set
 
-    override suspend fun connectMedia(isSfuFallbackEnabled: Boolean): Result<MatrixRtcMediaSession> {
+    override suspend fun connectMedia(isSfuFallbackEnabled: Boolean, videoCodec: MatrixRtcVideoCodec): Result<MatrixRtcMediaSession> {
         lastIsSfuFallbackEnabled = isSfuFallbackEnabled
+        lastVideoCodec = videoCodec
         connectMediaCount++
         onConnectMedia()
+        connectMediaFailure?.let { return Result.failure(it) }
         return Result.success(newMediaSession().also { lastMediaSession = it }).also {
             if (status.value == MatrixRtcCallStatus.Connecting) status.value = MatrixRtcCallStatus.Connected(connectedSinceMs, degraded = false)
         }
@@ -355,8 +377,8 @@ class FakeMatrixRtcMediaSession(
     var publishMicrophoneResult: suspend () -> Result<Unit> = { Result.success(Unit) }
 
     override suspend fun publishMicrophone(muted: Boolean): Result<Unit> {
-        publishMicrophoneResult().getOrElse { return Result.failure(it) }
         publishMicrophoneCalls += muted
+        publishMicrophoneResult().onFailure { return Result.failure(it) }
         // As the real one does: the publication carries the mute, so the flow reports it from the
         // moment the microphone is up rather than only once someone toggles the button.
         _isMicrophoneMuted.value = muted

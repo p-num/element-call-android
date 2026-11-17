@@ -103,6 +103,21 @@ class KonsistBoundaryTest {
     }
 
     @Test
+    fun `no analytics or crash-reporting SDK in the library`() {
+        // The call hands its analytics to the host, which forwards them (feature-hq 044 R1).
+        val forbidden = listOf(
+            "com.posthog",
+            "io.sentry",
+            "com.google.firebase",
+            "io.element.android.analytics",
+        )
+        files
+            .filter { it.moduleName.startsWith("call/") }
+            .filter { file -> file.imports.any { import -> forbidden.any { import.name.startsWith(it) } } }
+            .assertNoOffender("The call sends no analytics itself: no import of $forbidden in call/*")
+    }
+
+    @Test
     fun `the only library Activity is the call screen`() {
         val activityParents = setOf("Activity", "ComponentActivity", "AppCompatActivity", "FragmentActivity")
         productionFiles

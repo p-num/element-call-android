@@ -25,6 +25,7 @@ import io.element.android.call.api.rtc.MatrixRtcTileId
 import io.element.android.call.api.rtc.MatrixRtcTileKind
 import io.element.android.call.api.rtc.MatrixRtcTileRef
 import io.element.android.call.api.rtc.MatrixRtcTileRoster
+import io.element.android.call.api.rtc.MatrixRtcVideoCodec
 import io.element.android.call.api.rtc.MatrixRtcVideoConstraints
 import io.element.android.call.api.rtc.MatrixRtcVideoFrame
 import io.element.android.call.impl.rtc.media.AudioCapture
@@ -59,6 +60,7 @@ import org.matrix.rtc.FfiLocalTrack
 import org.matrix.rtc.FfiMediaConstraints
 import org.matrix.rtc.FfiPublishOptions
 import org.matrix.rtc.FfiStreamKind
+import org.matrix.rtc.FfiVideoCodecPreference
 import org.matrix.rtc.FfiVideoDetail
 import org.matrix.rtc.FfiVideoSourceConfig
 import org.matrix.rtc.MediaSession
@@ -79,6 +81,8 @@ internal class RustMatrixRtcMediaSession(
      * collector's thread every decoded frame would be copied on the main one, thirty times a second.
      */
     private val dispatchers: ElementCallDispatchers,
+    /** The camera's and every screen share's, fixed for the session (feature-hq 043 C1, C2). The microphone keeps the core's. */
+    private val videoCodec: MatrixRtcVideoCodec,
 ) : MatrixRtcMediaSession {
     private val _isOwnMediaDegraded = MutableStateFlow(false)
     override val isOwnMediaDegraded: StateFlow<Boolean> = _isOwnMediaDegraded
@@ -620,6 +624,7 @@ internal class RustMatrixRtcMediaSession(
                     // screen while the call connects - so no peer sees this member unmuted for the
                     // moment between the publication and the replay below.
                     muted = muted,
+                    videoCodec = FfiVideoCodecPreference.AUTO,
                 )
             )
         }
@@ -680,6 +685,7 @@ internal class RustMatrixRtcMediaSession(
                         // Unmuted by setTransportMuted below, once capture is running: a peer told
                         // to expect frames before there are any is shown a grey tile meanwhile.
                         muted = true,
+                        videoCodec = videoCodec.toFfi(),
                     )
                 )
             }.also { cameraTrack = it }
@@ -739,6 +745,7 @@ internal class RustMatrixRtcMediaSession(
                             // Unmuted by setScreenShareMuted below, once the projection has actually
                             // started - the reason that call is ordered after screenCapture.start.
                             muted = true,
+                            videoCodec = videoCodec.toFfi(),
                         )
                     )
                 }.also { screenTrack = it }

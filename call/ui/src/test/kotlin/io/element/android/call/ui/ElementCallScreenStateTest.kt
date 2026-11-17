@@ -13,11 +13,12 @@ import app.cash.turbine.test
 import com.google.common.truth.Truth.assertThat
 import io.element.android.call.api.ElementCallConnection
 import io.element.android.call.api.ElementCallData
-import io.element.android.call.api.ElementCallReactionsPreference
+import io.element.android.call.api.ElementCallFailure
 import io.element.android.call.api.ElementCallRoomMember
 import io.element.android.call.api.ElementCallSnapshot
 import io.element.android.call.api.ElementCallVersion
 import io.element.android.call.api.rtc.MatrixRtcAudioLevel
+import io.element.android.call.api.rtc.MatrixRtcMembershipFormat
 import io.element.android.call.api.rtc.MatrixRtcParticipant
 import io.element.android.call.api.rtc.MatrixRtcReaction
 import io.element.android.call.api.rtc.MatrixRtcStreamKind
@@ -26,6 +27,7 @@ import io.element.android.call.api.rtc.MatrixRtcTile
 import io.element.android.call.api.rtc.MatrixRtcTileId
 import io.element.android.call.api.rtc.MatrixRtcTileKind
 import io.element.android.call.api.rtc.MatrixRtcTileRoster
+import io.element.android.call.api.rtc.MatrixRtcVideoCodec
 import io.element.android.call.api.rtc.MatrixRtcVideoConstraints
 import io.element.android.call.api.rtc.id.UserId
 import io.element.android.call.test.A_ROOM_ID
@@ -205,6 +207,21 @@ class ElementCallScreenStateTest {
 
             assertThat(requestCount).isEqualTo(0)
             assertThat(controller.cameraEnabledCalls).containsExactly(false)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `opening the app settings reaches the navigator`() = runTest {
+        val controller = FakeElementCallController(initialState = aConnectedSnapshot())
+        var openCount = 0
+
+        moleculeFlow(RecompositionMode.Immediate) {
+            rememberElementCallScreenState(controller, aNavigator(onOpenAppSettings = { openCount++ }))
+        }.test {
+            awaitItem().eventSink(ElementCallScreenEvent.OpenAppSettings)
+
+            assertThat(openCount).isEqualTo(1)
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -794,19 +811,50 @@ class ElementCallScreenStateTest {
 
         moleculeFlow(RecompositionMode.Immediate) { rememberElementCallScreenState(controller, aNavigator()) }.test {
             val closed = awaitItem()
-            assertThat(closed.isPreferencesVisible).isFalse()
-            closed.eventSink(ElementCallScreenEvent.ShowPreferences)
-            val open = consumeItemsUntilPredicate { it.isPreferencesVisible }.last()
+            assertThat(closed.settingsSheet).isNull()
+            closed.eventSink(ElementCallScreenEvent.ShowSettingsSheet(ElementCallSettingsSheet.PREFERENCES))
+            val open = consumeItemsUntilPredicate { it.settingsSheet == ElementCallSettingsSheet.PREFERENCES }.last()
+            assertThat(open.showsReactions).isTrue()
+            assertThat(open.playsReactionSounds).isTrue()
 
-            open.eventSink(ElementCallScreenEvent.SetReactionsPreference(ElementCallReactionsPreference.WITHOUT_SOUND))
+            open.eventSink(ElementCallScreenEvent.SetShowsReactions(false))
+            open.eventSink(ElementCallScreenEvent.SetPlaysReactionSounds(false))
             open.eventSink(ElementCallScreenEvent.SetSoundEffectsVolume(0.8f))
             open.eventSink(ElementCallScreenEvent.PlaySoundEffectsVolumeSample)
             val changed = consumeItemsUntilPredicate { it.soundEffectsVolume == 0.8f }.last()
-            assertThat(changed.reactionsPreference).isEqualTo(ElementCallReactionsPreference.WITHOUT_SOUND)
+            assertThat(changed.showsReactions).isFalse()
+            assertThat(changed.playsReactionSounds).isFalse()
             assertThat(controller.soundEffectsVolumeSampleCount).isEqualTo(1)
 
-            changed.eventSink(ElementCallScreenEvent.DismissPreferences)
-            consumeItemsUntilPredicate { !it.isPreferencesVisible }
+            changed.eventSink(ElementCallScreenEvent.DismissSettingsSheet)
+            consumeItemsUntilPredicate { it.settingsSheet == null }
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `the developer options sheet opens and closes, and its controls reach the controller`() = runTest {
+        val controller = FakeElementCallController(initialState = aConnectedSnapshot())
+
+        moleculeFlow(RecompositionMode.Immediate) { rememberElementCallScreenState(controller, aNavigator()) }.test {
+            val closed = awaitItem()
+            // Asked of the core only once the sheet is open.
+            assertThat(closed.videoCodecs).isEmpty()
+            closed.eventSink(ElementCallScreenEvent.ShowSettingsSheet(ElementCallSettingsSheet.DEVELOPER_OPTIONS))
+            val open = consumeItemsUntilPredicate { it.settingsSheet == ElementCallSettingsSheet.DEVELOPER_OPTIONS }.last()
+            assertThat(open.videoCodecs).containsExactlyElementsIn(controller.videoCodecs).inOrder()
+            assertThat(open.membershipFormat).isEqualTo(MatrixRtcMembershipFormat.ROOM_STATE)
+            assertThat(open.videoCodec).isEqualTo(MatrixRtcVideoCodec.AUTO)
+
+            open.eventSink(ElementCallScreenEvent.ToggleTileStats)
+            open.eventSink(ElementCallScreenEvent.SetMembershipFormat(MatrixRtcMembershipFormat.MSC))
+            open.eventSink(ElementCallScreenEvent.SetVideoCodec(MatrixRtcVideoCodec.H264))
+            val changed = consumeItemsUntilPredicate { it.videoCodec == MatrixRtcVideoCodec.H264 }.last()
+            assertThat(changed.membershipFormat).isEqualTo(MatrixRtcMembershipFormat.MSC)
+            assertThat(controller.toggleTileStatsCount).isEqualTo(1)
+
+            changed.eventSink(ElementCallScreenEvent.DismissSettingsSheet)
+            consumeItemsUntilPredicate { it.settingsSheet == null }
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -816,7 +864,34 @@ class ElementCallScreenStateTest {
         val controller = FakeElementCallController(initialState = aConnectedSnapshot(), isDeveloperModeEnabled = false)
 
         moleculeFlow(RecompositionMode.Immediate) { rememberElementCallScreenState(controller, aNavigator()) }.test {
-            assertThat(awaitItem().isDeveloperModeEnabled).isFalse()
+            val state = awaitItem()
+            assertThat(state.isDeveloperModeEnabled).isFalse()
+            // Refused where the screen handles it, not only absent from the menu (043 C6).
+            state.eventSink(ElementCallScreenEvent.ShowSettingsSheet(ElementCallSettingsSheet.DEVELOPER_OPTIONS))
+            runCurrent()
+            expectNoEvents()
+            state.eventSink(ElementCallScreenEvent.ShowSettingsSheet(ElementCallSettingsSheet.PREFERENCES))
+            assertThat(consumeItemsUntilPredicate { it.settingsSheet != null }.last().settingsSheet).isEqualTo(ElementCallSettingsSheet.PREFERENCES)
+            cancelAndIgnoreRemainingEvents()
+        }
+    }
+
+    @Test
+    fun `use room state saves room state, then closes the call`() = runTest {
+        val controller = FakeElementCallController(
+            initialState = aConnectedSnapshot().copy(
+                connection = ElementCallConnection.Failed(ElementCallFailure.JoinRefused(errcode = null)),
+                joiningFormat = MatrixRtcMembershipFormat.MSC,
+            ),
+            isDeveloperModeEnabled = false,
+        )
+        controller.setMembershipFormat(MatrixRtcMembershipFormat.MSC)
+
+        moleculeFlow(RecompositionMode.Immediate) { rememberElementCallScreenState(controller, aNavigator()) }.test {
+            val failed = awaitItem()
+            assertThat(failed.joiningFormat).isEqualTo(MatrixRtcMembershipFormat.MSC)
+            failed.eventSink(ElementCallScreenEvent.UseRoomStateAndClose)
+            assertThat(controller.membershipFormatsAtHangUp).containsExactly(MatrixRtcMembershipFormat.ROOM_STATE)
             cancelAndIgnoreRemainingEvents()
         }
     }
@@ -873,10 +948,12 @@ class ElementCallScreenStateTest {
         onMinimize: () -> Unit = {},
         onRequestCameraPermission: () -> Unit = {},
         onRequestScreenCapture: () -> Unit = {},
+        onOpenAppSettings: () -> Unit = {},
     ) = object : ElementCallNavigator {
         override fun close() = onClose()
         override fun minimize() = onMinimize()
         override fun requestCameraPermission() = onRequestCameraPermission()
         override fun requestScreenCapture() = onRequestScreenCapture()
+        override fun openAppSettings() = onOpenAppSettings()
     }
 }

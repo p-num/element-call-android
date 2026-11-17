@@ -18,9 +18,9 @@ import io.element.android.call.api.ElementCallHandRequestFailure
 import io.element.android.call.api.ElementCallInterruption
 import io.element.android.call.api.ElementCallOptions
 import io.element.android.call.api.ElementCallPreferences
-import io.element.android.call.api.ElementCallReactionsPreference
 import io.element.android.call.api.ElementCallRoomContext
 import io.element.android.call.api.ElementCallWindowRect
+import io.element.android.call.api.analytics.NoOpElementCallAnalytics
 import io.element.android.call.api.rtc.MatrixRtcAudioLevel
 import io.element.android.call.api.rtc.MatrixRtcCallEnd
 import io.element.android.call.api.rtc.MatrixRtcCallEvent
@@ -49,6 +49,7 @@ import io.element.android.call.api.rtc.MatrixRtcStreamRef
 import io.element.android.call.api.rtc.MatrixRtcTileId
 import io.element.android.call.api.rtc.MatrixRtcTileKind
 import io.element.android.call.api.rtc.MatrixRtcUnableToDecrypt
+import io.element.android.call.api.rtc.MatrixRtcVideoCodec
 import io.element.android.call.api.rtc.id.UserId
 import io.element.android.call.impl.audio.CallSoundEffect
 import io.element.android.call.test.A_ROOM_ID
@@ -138,19 +139,56 @@ class DefaultElementCallControllerTest {
     }
 
     @Test
-    fun `denying the microphone fails the call rather than joining silently`() = runTest {
+    fun `denying the microphone fails the call before anything reaches the room or the ring`() = runTest {
         val rtcClient = FakeMatrixRtcClient()
-        val controller = createController(rtcClient = rtcClient)
+        val platform = FakeElementCallPlatform()
+        var audioFocusRequests = 0
+        val controller = createController(
+            rtcClient = rtcClient,
+            platform = platform,
+            audioFocus = FakeAudioFocus(requestAudioFocusResult = { audioFocusRequests++ }, releaseAudioFocusResult = {}),
+            roomIsDm = true,
+        )
+        assertThat(controller.state.value?.connection).isEqualTo(ElementCallConnection.RequestingPermission)
+        assertThat(rtcClient.roomCount).isEqualTo(0)
 
-        controller.state.filterNotNull().test {
-            awaitItem()
-            controller.setMicrophonePermissionGranted(false)
+        controller.setMicrophonePermissionGranted(false)
+        runCurrent()
 
-            val states = consumeItemsUntilPredicate { it.connection is ElementCallConnection.Failed }
-            assertThat(states.last().connection).isInstanceOf(ElementCallConnection.Failed::class.java)
-            assertThat(rtcClient.roomCount).isEqualTo(0)
-            cancelAndIgnoreRemainingEvents()
-        }
+        assertThat(controller.state.value?.connection).isEqualTo(ElementCallConnection.Failed(ElementCallFailure.MicrophoneRefused))
+        assertThat(rtcClient.roomCount).isEqualTo(0)
+        assertThat(platform.startForegroundServiceCount).isEqualTo(0)
+        assertThat(audioFocusRequests).isEqualTo(0)
+    }
+
+    @Test
+    fun `a camera refused before media turns the camera off and the call carries on without it`() = runTest {
+        val rtcClient = FakeMatrixRtcClient()
+        val controller = createController(rtcClient = rtcClient, isAudioCall = false)
+        assertThat(controller.state.value?.isCameraEnabled).isTrue()
+
+        controller.setMicrophonePermissionGranted(true)
+        controller.setCameraPermissionGranted(false)
+        runCurrent()
+
+        assertThat(controller.state.value?.connection).isEqualTo(ElementCallConnection.Connected)
+        assertThat(controller.state.value?.isCameraEnabled).isFalse()
+        assertThat(rtcClient.lastCall?.lastMediaSession?.cameraEnabledCalls).isEmpty()
+    }
+
+    /** The voice-call tap made while joining: recorded as an intent, then granted once media is up. */
+    @Test
+    fun `a camera tapped on while a voice call joins and granted after it connects turns on`() = runTest {
+        val rtcClient = FakeMatrixRtcClient()
+        val controller = createController(rtcClient = rtcClient, isAudioCall = true)
+        controller.setMicrophonePermissionGranted(true)
+        controller.setCameraEnabled(true)
+        runCurrent()
+
+        controller.setCameraPermissionGranted(true)
+        runCurrent()
+
+        assertThat(rtcClient.lastCall?.lastMediaSession?.cameraEnabledCalls).contains(true)
     }
 
     @Test
@@ -231,7 +269,7 @@ class DefaultElementCallControllerTest {
     }
 
     @Test
-    fun `a call opens its room in the membership format the option asks for`() = runTest {
+    fun `a call opens its room in the membership format the store holds`() = runTest {
         MatrixRtcMembershipFormat.entries.forEach { preferred ->
             val rtcClient = FakeMatrixRtcClient()
             val controller = createController(rtcClient = rtcClient, membershipFormat = preferred)
@@ -334,7 +372,7 @@ class DefaultElementCallControllerTest {
         controller.setMicrophonePermissionGranted(true)
         runCurrent()
 
-        assertThat(controller.state.value?.connection).isEqualTo(ElementCallConnection.Failed(ElementCallFailure.JoinRefused))
+        assertThat(controller.state.value?.connection).isEqualTo(ElementCallConnection.Failed(ElementCallFailure.JoinRefused(errcode = "M_FORBIDDEN")))
     }
 
     @Test
@@ -947,6 +985,24 @@ class DefaultElementCallControllerTest {
         }
     }
 
+    /** The route follows the call as the join settled it: a voice call joined from a video ask stays on the earpiece. */
+    @Test
+    fun `joining a voice call starts on the earpiece`() = runTest {
+        val rtcClient = FakeMatrixRtcClient(callIntent = MatrixRtcCallIntent.AUDIO)
+        val audioDevices = FakeCallAudioDeviceController(initialDevices = listOf(anEarpiece(), aSpeaker()))
+        val controller = createController(
+            rtcClient = rtcClient,
+            audioDeviceController = audioDevices,
+            isAudioCall = false,
+            isStartingCall = false,
+        )
+
+        controller.setMicrophonePermissionGranted(true)
+        runCurrent()
+
+        assertThat(audioDevices.lastPreferLoudspeaker).isFalse()
+    }
+
     @Test
     fun `a video call still prefers a headset over the loudspeaker`() = runTest {
         val rtcClient = FakeMatrixRtcClient()
@@ -1187,6 +1243,54 @@ class DefaultElementCallControllerTest {
         assertThat(controller.state.value?.connection).isEqualTo(ElementCallConnection.Connected)
         assertThat(rtcClient.lastCall?.lastMediaSession?.cameraEnabledCalls).isEmpty()
         assertThat(controller.state.value?.isCameraEnabled).isFalse()
+    }
+
+    /**
+     * Joining from a room's call button asks for video, because the button cannot know what is in progress; the core
+     * does, from the members, and a voice call has to join with the camera off.
+     */
+    @Test
+    fun `joining a voice call leaves the camera off`() = runTest {
+        val rtcClient = FakeMatrixRtcClient(callIntent = MatrixRtcCallIntent.AUDIO)
+        val controller = createController(rtcClient = rtcClient, isAudioCall = false, isStartingCall = false)
+
+        controller.setCameraPermissionGranted(true)
+        controller.setMicrophonePermissionGranted(true)
+        runCurrent()
+
+        assertThat(controller.state.value?.connection).isEqualTo(ElementCallConnection.Connected)
+        assertThat(rtcClient.lastCall?.lastMediaSession?.cameraEnabledCalls).isEmpty()
+        assertThat(controller.state.value?.isCameraEnabled).isFalse()
+    }
+
+    /** The screen's up-front camera question, answered once the voice call is up, is not a tap on the camera button. */
+    @Test
+    fun `the up-front camera answer landing in a voice call leaves the camera off`() = runTest {
+        val rtcClient = FakeMatrixRtcClient(callIntent = MatrixRtcCallIntent.AUDIO)
+        val controller = createController(rtcClient = rtcClient, isAudioCall = false, isStartingCall = false)
+        controller.setMicrophonePermissionGranted(true)
+        runCurrent()
+
+        controller.setCameraPermissionGranted(true)
+        runCurrent()
+
+        assertThat(rtcClient.lastCall?.lastMediaSession?.cameraEnabledCalls).isEmpty()
+        assertThat(controller.state.value?.isCameraEnabled).isFalse()
+    }
+
+    /** The user's choice while joining wins over the join's intent. */
+    @Test
+    fun `turning the camera on while a voice call connects starts it`() = runTest {
+        val rtcClient = FakeMatrixRtcClient(callIntent = MatrixRtcCallIntent.AUDIO)
+        val controller = createController(rtcClient = rtcClient, isAudioCall = false, isStartingCall = false)
+
+        controller.setCameraPermissionGranted(true)
+        controller.setCameraEnabled(true)
+        runCurrent()
+        controller.setMicrophonePermissionGranted(true)
+        runCurrent()
+
+        assertThat(rtcClient.lastCall?.lastMediaSession?.cameraEnabledCalls).containsExactly(true)
     }
 
     @Test
@@ -2111,14 +2215,14 @@ class DefaultElementCallControllerTest {
     }
 
     @Test
-    fun `silent shows without a sound, off shows and plays nothing, and each applies from the next reaction`() = runTest {
+    fun `sounds off shows without a sound, hidden shows and plays nothing, and each applies from the next reaction`() = runTest {
         val (controller, session, platform) = aCallWithReactions(platform = FakeElementCallPlatform(reactionSpread = 100.milliseconds))
         val renderer = platform.soundEffectRenderers.single()
         controller.reactions.test {
             session.emit(MatrixRtcCallEvent.Reaction(A_REMOTE_MEMBER_ID, emoji = "🎉", name = "party", sound = "party"))
             runCurrent()
             // Changed while the first is still waiting out its spread: it keeps the preference it arrived under (037 R15).
-            controller.setReactionsPreference(ElementCallReactionsPreference.WITHOUT_SOUND)
+            controller.setPlaysReactionSounds(false)
             advanceTimeBy(101.milliseconds)
             awaitItem()
             assertThat(renderer.reactions).containsExactly("party")
@@ -2128,7 +2232,9 @@ class DefaultElementCallControllerTest {
             awaitItem()
             assertThat(renderer.reactions).containsExactly("party")
 
-            controller.setReactionsPreference(ElementCallReactionsPreference.OFF)
+            // Hidden plays nothing, whatever the sound switch holds (043 R7).
+            controller.setPlaysReactionSounds(true)
+            controller.setShowsReactions(false)
             session.emit(MatrixRtcCallEvent.Reaction(A_REMOTE_MEMBER_ID, emoji = "👏", name = "clapping", sound = "clap"))
             advanceTimeBy(1.seconds)
             expectNoEvents()
@@ -2172,17 +2278,45 @@ class DefaultElementCallControllerTest {
 
     @Test
     fun `the preferences come from the store and go back to it`() = runTest {
-        val store = FakeElementCallPreferencesStore(reactions = ElementCallReactionsPreference.WITHOUT_SOUND, soundEffectsVolume = 0.2f)
+        val store = FakeElementCallPreferencesStore(
+            showsReactions = true,
+            playsReactionSounds = false,
+            soundEffectsVolume = 0.2f,
+            membershipFormat = MatrixRtcMembershipFormat.MSC,
+            videoCodec = MatrixRtcVideoCodec.VP9,
+        )
         val (controller, _, platform) = aCallWithReactions(preferencesStore = store)
-        assertThat(controller.preferences.value).isEqualTo(ElementCallPreferences(ElementCallReactionsPreference.WITHOUT_SOUND, 0.2f))
+        assertThat(controller.preferences.value).isEqualTo(
+            ElementCallPreferences(
+                showsReactions = true,
+                playsReactionSounds = false,
+                soundEffectsVolume = 0.2f,
+                membershipFormat = MatrixRtcMembershipFormat.MSC,
+                videoCodec = MatrixRtcVideoCodec.VP9,
+            )
+        )
         assertThat(platform.soundEffectRenderers.single().volume).isEqualTo(0.2f)
 
-        controller.setReactionsPreference(ElementCallReactionsPreference.OFF)
+        controller.setShowsReactions(false)
+        controller.setPlaysReactionSounds(true)
         controller.setSoundEffectsVolume(1.5f)
+        controller.setMembershipFormat(MatrixRtcMembershipFormat.ROOM_STATE)
+        controller.setVideoCodec(MatrixRtcVideoCodec.H264)
 
-        assertThat(store.reactions).isEqualTo(ElementCallReactionsPreference.OFF)
+        assertThat(store.showsReactions).isFalse()
+        assertThat(store.playsReactionSounds).isTrue()
         assertThat(store.soundEffectsVolume).isEqualTo(1f)
-        assertThat(controller.preferences.value).isEqualTo(ElementCallPreferences(ElementCallReactionsPreference.OFF, 1f))
+        assertThat(store.membershipFormat).isEqualTo(MatrixRtcMembershipFormat.ROOM_STATE)
+        assertThat(store.videoCodec).isEqualTo(MatrixRtcVideoCodec.H264)
+        assertThat(controller.preferences.value).isEqualTo(
+            ElementCallPreferences(
+                showsReactions = false,
+                playsReactionSounds = true,
+                soundEffectsVolume = 1f,
+                membershipFormat = MatrixRtcMembershipFormat.ROOM_STATE,
+                videoCodec = MatrixRtcVideoCodec.H264,
+            )
+        )
         // Applied to the running call's sounds at once, those playing included (037 R22).
         assertThat(platform.soundEffectRenderers.single().volume).isEqualTo(1f)
     }
@@ -2425,7 +2559,7 @@ class DefaultElementCallControllerTest {
         participantCapForJoinLeaveSounds: Int = ElementCallOptions.DEFAULT_PARTICIPANT_CAP_FOR_JOIN_LEAVE_SOUNDS,
         isSfuFallbackEnabled: Boolean = false,
         isDeveloperModeEnabled: Boolean = true,
-        preferencesStore: FakeElementCallPreferencesStore = FakeElementCallPreferencesStore(),
+        preferencesStore: FakeElementCallPreferencesStore = FakeElementCallPreferencesStore(membershipFormat = membershipFormat),
     ): DefaultElementCallController {
         val controller = DefaultElementCallController(
             scope = backgroundScope,
@@ -2436,7 +2570,6 @@ class DefaultElementCallControllerTest {
             lifecycleListener = lifecycleListener,
             roomContextProvider = roomContextProvider,
             options = ElementCallOptions(
-                membershipFormat = membershipFormat,
                 isScreenSharingEnabled = isScreenSharingEnabled,
                 participantCapForJoinLeaveSounds = participantCapForJoinLeaveSounds,
                 ringLifetime = ringLifetime,
@@ -2444,6 +2577,7 @@ class DefaultElementCallControllerTest {
                 isDeveloperModeEnabled = isDeveloperModeEnabled,
             ),
             preferencesStore = preferencesStore,
+            analytics = NoOpElementCallAnalytics,
         )
         controller.startCall(ElementCallData(roomId = A_ROOM_ID, isAudioCall = isAudioCall, isStartingCall = isStartingCall))
         runCurrent()

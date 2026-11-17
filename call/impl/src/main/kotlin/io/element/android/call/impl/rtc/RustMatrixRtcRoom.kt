@@ -107,6 +107,12 @@ internal class RustMatrixRtcRoom(
         throw MatrixRtcJoinException.TimedOut()
     } catch (e: MatrixRtcFfiException.JoinRefused) {
         throw MatrixRtcJoinException.Refused(errcode = e.errcode, reason = e.reason)
+    } catch (e: MatrixRtcFfiException.NoLiveKitTransport) {
+        throw MatrixRtcJoinException.NoLiveKitTransport(transportType = e.transportType)
+    } catch (_: MatrixRtcFfiException.TokenEndpointUnsupported) {
+        throw MatrixRtcJoinException.TokenEndpointUnsupported()
+    } catch (_: MatrixRtcFfiException.SlotClosed) {
+        throw MatrixRtcJoinException.SlotClosed()
     }
 
     private fun MatrixRtcCallKind.toFfi(): FfiCallKind = when (this) {

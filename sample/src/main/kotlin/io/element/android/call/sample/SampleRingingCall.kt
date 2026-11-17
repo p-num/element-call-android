@@ -99,6 +99,7 @@ class SampleRingingCall(context: Context, private val scope: CoroutineScope, pri
         .rtcClient(FakeMatrixRtcClient(joinResult = { Result.success(call).also { joined.complete(Unit) } }))
         .roomContext(FakeElementCallRoomContextProvider(ElementCallRoomContext(displayName = "Bob", isDm = true, members = MEMBERS)))
         .options(ElementCallOptions(ringLifetime = RING_LIFETIME))
+        .analytics(SampleAnalytics)
         .build(scope)
 
     override val controller: ElementCallController get() = stack.controller

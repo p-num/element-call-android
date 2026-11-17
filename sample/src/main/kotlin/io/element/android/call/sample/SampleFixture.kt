@@ -68,7 +68,9 @@ enum class SampleFixture(val key: String, val category: Category, val title: Str
         title = "Failed",
         description = "What a homeserver with no LiveKit transport looks like.",
     ) {
-        override fun snapshot() = aConnecting(ElementCallConnection.Failed(ElementCallFailure.Other("Homeserver offers no LiveKit transport")))
+        override fun snapshot() = aConnecting(
+            ElementCallConnection.Failed(ElementCallFailure.Other("Homeserver offers no LiveKit transport", isJoinFailure = true))
+        )
     },
     CONNECTION_LOST(
         key = "connection_lost",

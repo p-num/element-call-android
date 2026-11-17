@@ -27,6 +27,12 @@ interface MatrixRtcCall : AutoCloseable {
     val memberId: String
 
     /**
+     * Voice or video, as the join settled it: the intent we started the call with, else the one the members
+     * already in it agree on. Start the camera for [MatrixRtcCallIntent.VIDEO] only.
+     */
+    val intent: MatrixRtcCallIntent
+
+    /**
      * Who the RTC core currently considers joined to this slot, ourselves included.
      *
      * The core's membership projection, not the media roster, so it is populated before - and
@@ -60,8 +66,12 @@ interface MatrixRtcCall : AutoCloseable {
      * server, which the core connects as it would reconnect a lost one (feature-hq 034 C10).
      *
      * @param isSfuFallbackEnabled see [io.element.android.call.api.ElementCallOptions.isSfuFallbackEnabled].
+     * @param videoCodec what the camera and every screen share of this session publish with (feature-hq 043 C2).
      */
-    suspend fun connectMedia(isSfuFallbackEnabled: Boolean = false): Result<MatrixRtcMediaSession>
+    suspend fun connectMedia(
+        isSfuFallbackEnabled: Boolean = false,
+        videoCodec: MatrixRtcVideoCodec = MatrixRtcVideoCodec.AUTO,
+    ): Result<MatrixRtcMediaSession>
 
     /**
      * Leave the call, publishing a leave membership event. Returns without waiting for it to be sent: one attempt, and if it

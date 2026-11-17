@@ -281,10 +281,6 @@ fi
 # come from CI_GRADLE_ARG_PROPERTIES, unquoted on purpose: it is a list of flags, or nothing.
 read -r -a GRADLE_ARGS <<< "${CI_GRADLE_ARG_PROPERTIES:-}"
 
-if [ ! -f rtc/local/matrixrtc-release.aar ]; then
-    fail "No core AAR at rtc/local/matrixrtc-release.aar. Run ./tools/rtc/fetch-rust-rtc (docs/local_stack.md, layer 1)."
-fi
-
 if [ "$PACKAGE_ONLY" = "yes" ]; then
     echo "Building packages from locally validated $VALIDATED_SOURCE_REVISION"
     ./gradlew assemble "${GRADLE_ARGS[@]}"

@@ -11,6 +11,7 @@ import io.element.android.call.api.audio.CallAudioDevice
 import io.element.android.call.api.rtc.MatrixRtcAudioLevel
 import io.element.android.call.api.rtc.MatrixRtcConnectionLossReason
 import io.element.android.call.api.rtc.MatrixRtcFrameEncryptionState
+import io.element.android.call.api.rtc.MatrixRtcMembershipFormat
 import io.element.android.call.api.rtc.MatrixRtcReceiveStats
 import io.element.android.call.api.rtc.MatrixRtcSignallingHealth
 import io.element.android.call.api.rtc.MatrixRtcStreamRef
@@ -155,12 +156,17 @@ data class ElementCallSnapshot(
     /** Whether the call is showing full screen, as opposed to docked in the minimized bar. */
     val isMaximized: Boolean = true,
     /**
-     * Whether tiles are showing their debug readout, toggled from the Preferences sheet in developer mode.
+     * Whether tiles are showing their debug readout, toggled from the Developer options sheet (feature-hq 043 R10).
      *
      * Deliberately per call rather than persisted: it is answering a question about *this* call, and
      * a developer who left it on last week should not be handed a screen full of numbers today.
      */
     val isTileStatsVisible: Boolean = false,
+    /**
+     * The membership format this call joined with, null until the join starts. The store's value may have changed since
+     * (043 R14); a failure is judged by this one (R18).
+     */
+    val joiningFormat: MatrixRtcMembershipFormat? = null,
     /** The last raise or lower the homeserver refused for good, until the user has been told or asks again. */
     val handRequestFailure: ElementCallHandRequestFailure? = null,
     /** Whether our homeserver answers, from the join on (feature-hq 034 C4): the controls are live before media is. */
@@ -239,9 +245,15 @@ sealed interface ElementCallFailure {
     /** The homeserver did not let the join complete in time. */
     data object JoinTimedOut : ElementCallFailure
 
-    /** The homeserver refused the join for good. */
-    data object JoinRefused : ElementCallFailure
+    /** The homeserver refused the join for good; [errcode] is its Matrix error code as it sent it, when it gave one. */
+    data class JoinRefused(val errcode: String?) : ElementCallFailure
 
-    /** Anything else that stopped the call from starting. Developer text, shown as it is. */
-    data class Other(val message: String) : ElementCallFailure
+    /** The microphone permission was refused, so the call never joined (042 R5). Started again by the user after a grant. */
+    data object MicrophoneRefused : ElementCallFailure
+
+    /**
+     * Anything else that stopped the call from starting. Developer text, shown as it is. [isJoinFailure] when it stopped the
+     * join itself, up to and including the media connection, rather than something after it (feature-hq 043 R18).
+     */
+    data class Other(val message: String, val isJoinFailure: Boolean) : ElementCallFailure
 }

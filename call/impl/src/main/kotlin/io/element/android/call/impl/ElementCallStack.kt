@@ -16,6 +16,8 @@ import io.element.android.call.api.ElementCallPreferencesStore
 import io.element.android.call.api.ElementCallRoomContextProvider
 import io.element.android.call.api.NoOpElementCallLifecycleListener
 import io.element.android.call.api.NoOpElementCallRoomContextProvider
+import io.element.android.call.api.analytics.ElementCallAnalytics
+import io.element.android.call.api.analytics.NoOpElementCallAnalytics
 import io.element.android.call.api.audio.AudioFocus
 import io.element.android.call.api.audio.CallAudioDeviceController
 import io.element.android.call.api.rtc.MatrixRtcClient
@@ -34,6 +36,7 @@ import org.matrix.rtc.MatrixBackend
  * val stack = ElementCallStack.Builder(context, SdkMatrixBackend(client, sessionScope))
  *     .roomContext(roomContextProvider)      // host only
  *     .lifecycleListener(listener)           // host only
+ *     .analytics(analytics)                  // host only
  *     .options(ElementCallOptions())
  *     .build(scope = sessionScope)
  * stack.controller                           // what the UI and the host drive
@@ -58,6 +61,7 @@ class ElementCallStack private constructor(
         private val context: Context = context.applicationContext
         private var roomContextProvider: ElementCallRoomContextProvider = NoOpElementCallRoomContextProvider
         private var lifecycleListener: ElementCallLifecycleListener = NoOpElementCallLifecycleListener
+        private var analytics: ElementCallAnalytics = NoOpElementCallAnalytics
         private var audioDeviceController: CallAudioDeviceController? = null
         private var audioFocus: AudioFocus? = null
         private var options: ElementCallOptions = ElementCallOptions()
@@ -70,6 +74,9 @@ class ElementCallStack private constructor(
 
         /** Call started, joined and ended, and whether the app is in the foreground. Defaults to a no-op. */
         fun lifecycleListener(listener: ElementCallLifecycleListener) = apply { lifecycleListener = listener }
+
+        /** Where the call's analytics go (feature-hq 044); the host forwards them, or not. Defaults to dropping them. */
+        fun analytics(analytics: ElementCallAnalytics) = apply { this.analytics = analytics }
 
         /** Audio routing. Defaults to [DefaultCallAudioDeviceController] over `AudioManager`. */
         fun audioDeviceController(controller: CallAudioDeviceController) = apply { audioDeviceController = controller }
@@ -92,7 +99,8 @@ class ElementCallStack private constructor(
 
         /**
          * @param scope lives as long as the Matrix session. The core, its feeds and the running call
-         * hang off it, so cancelling it is how a logout tears everything down.
+         * hang off it, so cancelling it is how a logout tears everything down. Hang up first, or the call's end is not
+         * reported to [analytics]; it has been reported once the controller's `state` is null.
          */
         fun build(scope: CoroutineScope): ElementCallStack {
             // Recorded before the library loads; applied on the first native call.
@@ -113,6 +121,7 @@ class ElementCallStack private constructor(
                 roomContextProvider = roomContextProvider,
                 options = options,
                 preferencesStore = preferencesStore ?: DefaultElementCallPreferencesStore(context),
+                analytics = analytics,
             )
             return ElementCallStack(controller, options).also { ElementCallStackRegistry.register(it) }
         }
