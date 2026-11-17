@@ -7,6 +7,7 @@
 
 package io.element.android.call.api.analytics
 
+import io.element.android.call.api.ElementCallData
 import io.element.android.call.api.ElementCallEndReason
 import io.element.android.call.api.ElementCallVersion
 
@@ -17,6 +18,9 @@ import io.element.android.call.api.ElementCallVersion
  * platforms land in the same graphs, and only with the user's consent to analytics.
  */
 fun interface ElementCallAnalytics {
+    /** Called once for an accepted request, before its first event. The reporter retains this receiver through teardown. */
+    fun forAttempt(callData: ElementCallData): ElementCallAnalytics = this
+
     /**
      * Called synchronously, in order, before the call is torn down, sometimes while the call holds its own lock.
      * Return quickly and do not call back into the call; a throw is logged and ignored.

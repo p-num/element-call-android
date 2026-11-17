@@ -23,6 +23,7 @@ import io.element.android.call.api.ElementCallRoomContextProvider
 import io.element.android.call.api.ElementCallSnapshot
 import io.element.android.call.api.ElementCallWindowRect
 import io.element.android.call.api.analytics.ElementCallAnalytics
+import io.element.android.call.api.analytics.NoOpElementCallAnalytics
 import io.element.android.call.api.audio.AudioFocus
 import io.element.android.call.api.audio.CallAudioDevice
 import io.element.android.call.api.audio.CallAudioDeviceController
@@ -388,7 +389,13 @@ internal class DefaultElementCallController(
                 roomJob = scope.launch { observeRoom(callData) }
                 // At the request, not the grant: a refused microphone is an outcome of this attempt (044 R10).
                 // An attempt that ends before the join decides DM or group takes what the room is known to be (044 R25).
-                reporter = ElementCallAnalyticsReporter(analytics, platform::elapsedRealtimeMs, undecidedCallKind = { callKindOf(_state.value?.isDm == true) })
+                val attemptAnalytics = runCatchingExceptions { analytics.forAttempt(callData) }
+                    .getOrDefault(NoOpElementCallAnalytics)
+                reporter = ElementCallAnalyticsReporter(
+                    attemptAnalytics,
+                    platform::elapsedRealtimeMs,
+                    undecidedCallKind = { callKindOf(_state.value?.isDm == true) },
+                )
             }
         }
     }

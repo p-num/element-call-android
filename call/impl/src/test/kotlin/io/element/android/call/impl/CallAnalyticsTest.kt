@@ -66,6 +66,7 @@ import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Rule
 import org.junit.Test
+import java.util.IdentityHashMap
 import kotlin.time.Duration.Companion.hours
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -79,6 +80,35 @@ class CallAnalyticsTest {
     @get:Rule val warmUpRule = WarmUpRule()
 
     private val analytics = FakeElementCallAnalytics()
+
+    @Test
+    fun `the first and all later events retain their exact accepted receiver after replacement`() = runTest {
+        val receivers = IdentityHashMap<ElementCallData, FakeElementCallAnalytics>()
+        val factory = object : ElementCallAnalytics {
+            override fun track(event: ElementCallAnalyticsEvent) = error("Unbound receiver must never receive events")
+            override fun forAttempt(callData: ElementCallData): ElementCallAnalytics = FakeElementCallAnalytics().also { receivers[callData] = it }
+        }
+        val controller = createController(analytics = factory, start = false)
+        val first = ElementCallData(A_ROOM_ID, true, true)
+        val second = first.copy()
+        controller.startCall(first)
+        runCurrent()
+        val oldReceiver = requireNotNull(receivers[first])
+        assertThat(oldReceiver.events).isEmpty()
+        controller.hangUpAndWait(first)
+        controller.startCall(second)
+        runCurrent()
+        val replacementReceiver = requireNotNull(receivers[second])
+        assertThat(replacementReceiver).isNotSameInstanceAs(oldReceiver)
+        val lateFirstEvent = CallJoinAttempted("arbitrarily-late-old-attempt", GROUP)
+        oldReceiver.track(lateFirstEvent)
+        assertThat(replacementReceiver.events).isEmpty()
+        controller.setMicrophonePermissionGranted(false, second)
+        runCurrent()
+        assertThat(replacementReceiver.names).containsExactly("CallJoinAttempted", "CallJoinOutcome").inOrder()
+        assertThat(replacementReceiver.events).doesNotContain(lateFirstEvent)
+        assertThat(oldReceiver.events.last()).isEqualTo(lateFirstEvent)
+    }
 
     // region Attempted and outcome
 

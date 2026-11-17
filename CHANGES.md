@@ -12,6 +12,8 @@ actually read it. The matrix-rust-rtc core's own history is the core's:
 
 ## Unreleased
 
+- `ElementCallAnalytics.forAttempt` can bind a receiver to one accepted `ElementCallData` before its first event; the
+  default returns the existing receiver. The reporter retains that exact receiver through teardown and replacement.
 - Host correlation can observe `ElementCallSnapshot.participation`, with core-provided membership identity kind and optional
   legacy generation timestamp. This adapter requires rebuilt RTC bindings containing both fields; existing binaries cannot supply them.
 - The call settings (feature-hq 043). `ElementCallOptions.membershipFormat` is removed: the format is a device preference,
