@@ -420,34 +420,46 @@ class DefaultElementCallControllerTest {
     }
 
     @Test
-    fun `participation reports the current legacy join ID separately from the roster`() = runTest {
-        val joinId = "0123456789abcdef0123456789abcdef"
-        val call = FakeMatrixRtcCall(A_ROOM_ID, "m.call#room", legacyJoinId = joinId)
+    fun `a legacy rejoin reports its new ID while the roster still shows the previous call`() = runTest {
+        val first = FakeMatrixRtcCall(A_ROOM_ID, "m.call#room", legacyJoinId = "fedcba9876543210fedcba9876543210")
+        val second = FakeMatrixRtcCall(A_ROOM_ID, "m.call#room", legacyJoinId = "0123456789abcdef0123456789abcdef")
         val previous = MatrixRtcMembership(
-            memberId = call.memberId,
+            memberId = first.memberId,
             userId = A_USER_ID,
             deviceId = null,
             application = "m.call",
             identityKind = MatrixRtcMembershipIdentityKind.LEGACY_JOIN_ID,
-            legacyJoinId = "fedcba9876543210fedcba9876543210",
+            legacyJoinId = first.legacyJoinId,
         )
-        call.members.value = listOf(previous)
-        val rtcClient = FakeMatrixRtcClient(joinResult = { Result.success(call) })
-        val controller = createController(rtcClient = rtcClient)
+        first.members.value = listOf(previous)
+        second.members.value = listOf(previous)
+        val joins = listOf(first, second).iterator()
+        val rtcClient = FakeMatrixRtcClient(joinResult = { Result.success(joins.next()) })
+        val controller = createController(rtcClient = rtcClient, membershipFormat = MatrixRtcMembershipFormat.ROOM_STATE)
 
         controller.setMicrophonePermissionGranted(true)
         runCurrent()
 
+        val firstSnapshot = requireNotNull(controller.state.value)
+        assertThat(firstSnapshot.participation?.localLegacyJoinId).isEqualTo(first.legacyJoinId)
+
+        controller.hangUp()
+        runCurrent()
+        controller.startCall(firstSnapshot.callData.copy())
+        controller.setMicrophonePermissionGranted(true)
+        runCurrent()
+
         val beforeEcho = requireNotNull(controller.state.value?.participation)
-        assertThat(beforeEcho.localLegacyJoinId).isEqualTo(joinId)
+        assertThat(beforeEcho.localMemberId).isEqualTo(previous.memberId)
+        assertThat(beforeEcho.localLegacyJoinId).isEqualTo(second.legacyJoinId)
         assertThat(beforeEcho.members).containsExactly(previous)
 
-        val current = previous.copy(legacyJoinId = joinId)
-        call.members.value = listOf(current)
+        val current = previous.copy(legacyJoinId = second.legacyJoinId)
+        second.members.value = listOf(current)
         runCurrent()
 
         val afterEcho = requireNotNull(controller.state.value?.participation)
-        assertThat(afterEcho.localLegacyJoinId).isEqualTo(joinId)
+        assertThat(afterEcho.localLegacyJoinId).isEqualTo(second.legacyJoinId)
         assertThat(afterEcho.members).containsExactly(current)
     }
 

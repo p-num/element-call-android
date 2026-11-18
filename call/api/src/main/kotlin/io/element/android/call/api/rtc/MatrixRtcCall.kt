@@ -28,6 +28,7 @@ interface MatrixRtcCall : AutoCloseable {
 
     /** The join ID generated for our current legacy membership, before the roster echoes it. */
     val legacyJoinId: String?
+        get() = null
 
     /**
      * Voice or video, as the join settled it: the user's explicit choice, else the one the members already in it
