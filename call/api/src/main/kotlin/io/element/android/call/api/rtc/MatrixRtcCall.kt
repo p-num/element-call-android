@@ -26,6 +26,9 @@ interface MatrixRtcCall : AutoCloseable {
     /** Our own membership id. Correlation also requires the generation metadata in [members]. */
     val memberId: String
 
+    /** The join ID generated for our current legacy membership, before the roster echoes it. */
+    val legacyJoinId: String?
+
     /**
      * Voice or video, as the join settled it: the user's explicit choice, else the one the members already in it
      * agree on, else video. Start the camera for [MatrixRtcCallIntent.VIDEO] only.
@@ -84,7 +87,7 @@ interface MatrixRtcCall : AutoCloseable {
  * One MSC4143 membership of an RTC session, as the core sees it.
  *
  * [memberId] keys the media roster and frame-encryption reports. Its generation semantics depend on
- * [identityKind]: legacy ids can be reused, and require [membershipTs] to distinguish joins.
+ * [identityKind]: legacy ids can be reused, so [legacyJoinId] or [membershipTs] distinguishes joins.
  */
 data class MatrixRtcMembership(
     val memberId: String,
@@ -95,12 +98,15 @@ data class MatrixRtcMembership(
     val application: String?,
     /** Membership generation, supplied by the core rather than inferred from an id's spelling. */
     val identityKind: MatrixRtcMembershipIdentityKind = MatrixRtcMembershipIdentityKind.UNAVAILABLE,
-    /** Legacy membership creation time. Missing means correlation must remain unbound. */
+    /** Legacy membership creation time, used for correlation when the core classifies it as the generation. */
     val membershipTs: ULong? = null,
+    /** Per-join identifier advertised by an extension to the legacy membership. */
+    val legacyJoinId: String? = null,
 )
 
 enum class MatrixRtcMembershipIdentityKind {
     PER_JOIN_MEMBER_ID,
+    LEGACY_JOIN_ID,
     LEGACY_MEMBERSHIP_TIMESTAMP,
     UNAVAILABLE,
 }

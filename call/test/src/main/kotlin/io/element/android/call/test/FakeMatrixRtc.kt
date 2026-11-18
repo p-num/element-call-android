@@ -135,6 +135,7 @@ class FakeMatrixRtcCall(
     override val roomId: RoomId,
     override val slotId: String,
     override val intent: MatrixRtcCallIntent = MatrixRtcCallIntent.VIDEO,
+    override val legacyJoinId: String? = null,
 ) : MatrixRtcCall {
     override val memberId: String = "aLocalMemberId"
     override val members = MutableStateFlow(emptyList<MatrixRtcMembership>())

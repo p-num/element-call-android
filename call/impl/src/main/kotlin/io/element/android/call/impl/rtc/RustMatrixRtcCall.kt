@@ -50,6 +50,7 @@ internal class RustMatrixRtcCall(
 ) : MatrixRtcCall {
     override val slotId: String = rtcCall.slotId()
     override val memberId: String = rtcCall.memberId()
+    override val legacyJoinId: String? = rtcCall.legacyJoinId()
     override val intent: MatrixRtcCallIntent = when (rtcCall.callIntent()) {
         FfiCallIntent.AUDIO -> MatrixRtcCallIntent.AUDIO
         FfiCallIntent.VIDEO -> MatrixRtcCallIntent.VIDEO

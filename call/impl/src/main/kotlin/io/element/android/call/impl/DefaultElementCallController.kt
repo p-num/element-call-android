@@ -779,7 +779,14 @@ internal class DefaultElementCallController(
         launch(start = CoroutineStart.UNDISPATCHED) {
             rtcCall.members.collect { members ->
                 updateState {
-                    it.copy(participation = ElementCallParticipation(rtcCall.slotId, rtcCall.memberId, members.toImmutableList()))
+                    it.copy(
+                        participation = ElementCallParticipation(
+                            slotId = rtcCall.slotId,
+                            localMemberId = rtcCall.memberId,
+                            members = members.toImmutableList(),
+                            localLegacyJoinId = rtcCall.legacyJoinId,
+                        ),
+                    )
                 }
             }
         }

@@ -37,7 +37,9 @@ import io.element.android.call.api.rtc.MatrixRtcInterruptions
 import io.element.android.call.api.rtc.MatrixRtcJoinException
 import io.element.android.call.api.rtc.MatrixRtcLocalState
 import io.element.android.call.api.rtc.MatrixRtcMediaPhase
+import io.element.android.call.api.rtc.MatrixRtcMembership
 import io.element.android.call.api.rtc.MatrixRtcMembershipFormat
+import io.element.android.call.api.rtc.MatrixRtcMembershipIdentityKind
 import io.element.android.call.api.rtc.MatrixRtcReactionKind
 import io.element.android.call.api.rtc.MatrixRtcReceiveStats
 import io.element.android.call.api.rtc.MatrixRtcRing
@@ -415,6 +417,38 @@ class DefaultElementCallControllerTest {
 
         assertThat(controller.state.value).isNull()
         assertThat(call.leaveCount).isEqualTo(0)
+    }
+
+    @Test
+    fun `participation reports the current legacy join ID separately from the roster`() = runTest {
+        val joinId = "0123456789abcdef0123456789abcdef"
+        val call = FakeMatrixRtcCall(A_ROOM_ID, "m.call#room", legacyJoinId = joinId)
+        val previous = MatrixRtcMembership(
+            memberId = call.memberId,
+            userId = A_USER_ID,
+            deviceId = null,
+            application = "m.call",
+            identityKind = MatrixRtcMembershipIdentityKind.LEGACY_JOIN_ID,
+            legacyJoinId = "fedcba9876543210fedcba9876543210",
+        )
+        call.members.value = listOf(previous)
+        val rtcClient = FakeMatrixRtcClient(joinResult = { Result.success(call) })
+        val controller = createController(rtcClient = rtcClient)
+
+        controller.setMicrophonePermissionGranted(true)
+        runCurrent()
+
+        val beforeEcho = requireNotNull(controller.state.value?.participation)
+        assertThat(beforeEcho.localLegacyJoinId).isEqualTo(joinId)
+        assertThat(beforeEcho.members).containsExactly(previous)
+
+        val current = previous.copy(legacyJoinId = joinId)
+        call.members.value = listOf(current)
+        runCurrent()
+
+        val afterEcho = requireNotNull(controller.state.value?.participation)
+        assertThat(afterEcho.localLegacyJoinId).isEqualTo(joinId)
+        assertThat(afterEcho.members).containsExactly(current)
     }
 
     /** A ringing DM is not connected, however far our own media has got (030 R20): only the core's pickup is. */

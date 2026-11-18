@@ -213,6 +213,8 @@ data class ElementCallParticipation(
     val slotId: String,
     val localMemberId: String,
     val members: ImmutableList<MatrixRtcMembership>,
+    /** The current local join's expected legacy ID, independently of what the roster reports. */
+    val localLegacyJoinId: String? = null,
 )
 
 /** Which request on our hand failed. */

@@ -109,8 +109,10 @@ internal fun JoinedMembership.map() = MatrixRtcMembership(
     deviceId = senderDeviceId,
     application = application,
     membershipTs = membershipTs,
+    legacyJoinId = legacyJoinId,
     identityKind = when (identityKind) {
         FfiMembershipIdentityKind.PER_JOIN_MEMBER_ID -> MatrixRtcMembershipIdentityKind.PER_JOIN_MEMBER_ID
+        FfiMembershipIdentityKind.LEGACY_JOIN_ID -> MatrixRtcMembershipIdentityKind.LEGACY_JOIN_ID
         FfiMembershipIdentityKind.LEGACY_MEMBERSHIP_TIMESTAMP -> MatrixRtcMembershipIdentityKind.LEGACY_MEMBERSHIP_TIMESTAMP
         FfiMembershipIdentityKind.UNAVAILABLE -> MatrixRtcMembershipIdentityKind.UNAVAILABLE
     },

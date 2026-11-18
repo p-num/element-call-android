@@ -14,14 +14,18 @@ import org.matrix.rtc.FfiMembershipIdentityKind
 import org.matrix.rtc.JoinedMembership
 
 class MembershipGenerationTest {
+    private val legacyJoinId = "0123456789abcdef0123456789abcdef"
+
     @Test
     fun `the adapter preserves generation and does not infer an unavailable identity`() {
         val mappings = mapOf(
             FfiMembershipIdentityKind.PER_JOIN_MEMBER_ID to MatrixRtcMembershipIdentityKind.PER_JOIN_MEMBER_ID,
+            FfiMembershipIdentityKind.LEGACY_JOIN_ID to MatrixRtcMembershipIdentityKind.LEGACY_JOIN_ID,
             FfiMembershipIdentityKind.LEGACY_MEMBERSHIP_TIMESTAMP to MatrixRtcMembershipIdentityKind.LEGACY_MEMBERSHIP_TIMESTAMP,
             FfiMembershipIdentityKind.UNAVAILABLE to MatrixRtcMembershipIdentityKind.UNAVAILABLE,
         )
         for ((source, expected) in mappings) {
+            val joinId = legacyJoinId.takeIf { source == FfiMembershipIdentityKind.LEGACY_JOIN_ID }
             val membership = JoinedMembership(
                 roomId = "!fixture:example.org",
                 slotId = "m.call#room",
@@ -31,6 +35,7 @@ class MembershipGenerationTest {
                 memberId = "reused-member",
                 membershipEventId = "\$refresh",
                 membershipTs = 42uL,
+                legacyJoinId = joinId,
                 identityKind = source,
                 application = "m.call",
                 transports = emptyList(),
@@ -38,6 +43,7 @@ class MembershipGenerationTest {
             ).map()
             assertThat(membership.identityKind).isEqualTo(expected)
             assertThat(membership.membershipTs).isEqualTo(42uL)
+            assertThat(membership.legacyJoinId).isEqualTo(joinId)
         }
     }
 
@@ -52,6 +58,7 @@ class MembershipGenerationTest {
             memberId = "reused-member",
             membershipEventId = null,
             membershipTs = null,
+            legacyJoinId = null,
             identityKind = FfiMembershipIdentityKind.UNAVAILABLE,
             application = null,
             transports = emptyList(),
@@ -59,5 +66,6 @@ class MembershipGenerationTest {
         ).map()
         assertThat(membership.identityKind).isEqualTo(MatrixRtcMembershipIdentityKind.UNAVAILABLE)
         assertThat(membership.membershipTs).isNull()
+        assertThat(membership.legacyJoinId).isNull()
     }
 }
