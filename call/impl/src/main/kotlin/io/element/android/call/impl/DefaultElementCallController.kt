@@ -520,16 +520,18 @@ internal class DefaultElementCallController(
         scope.launch {
             val current = _state.value ?: return@launch
             if (expectedCall != null && current.callData !== expectedCall) return@launch
+            var admittedMedia: MatrixRtcMediaSession? = null
+            if (!withCurrentRequest(current.callData) {
             val isUpFrontAnswer = isUpFrontCameraAnswerPending
             isUpFrontCameraAnswerPending = false
-            updateState { it.copy(isCameraPermissionGranted = granted) }
+            updateState(current.callData) { it.copy(isCameraPermissionGranted = granted) }
             if (!granted) {
                 // Off from the refusal, not from when media connects (042 R10); a running call's own flow already says off.
                 if (call == null) {
                     joinsWithCamera = false
-                    updateState { it.copy(isCameraEnabled = false) }
+                    updateState(current.callData) { it.copy(isCameraEnabled = false) }
                 }
-                return@launch
+                return@withCurrentRequest
             }
             // Started again, not for the first time: the service is already running for the
             // microphone, and this is what lets it add the camera type it could not claim before.
@@ -545,8 +547,12 @@ internal class DefaultElementCallController(
             // button, in setCameraEnabled, and nowhere else. The up-front answer can also land once
             // the call is running, and then it starts the camera only if the call joins with it: a
             // voice call joined from a video ask (adoptIntent) must not get one.
-            if (isUpFrontAnswer && !joinsWithCamera) return@launch
-            call?.setCameraEnabled(true)
+            if (isUpFrontAnswer && !joinsWithCamera) return@withCurrentRequest
+            admittedMedia = call
+            }) {
+                return@launch
+            }
+            admittedMedia?.setCameraEnabled(true)
         }
     }
 

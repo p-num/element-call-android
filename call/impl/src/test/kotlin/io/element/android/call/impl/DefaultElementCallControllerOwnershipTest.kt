@@ -312,6 +312,25 @@ class DefaultElementCallControllerOwnershipTest {
         assertThat(newRoom.lastCall?.lastMediaSession?.disconnectCount).isEqualTo(0)
     }
 
+    @Test
+    fun `revoked camera permission cannot start capture or the foreground service`() = runTest {
+        var permitted = true
+        val policy = FakeElementCallRequestLifecycle(permitsEntryResult = { permitted })
+        val client = FakeMatrixRtcClient()
+        val platform = FakeElementCallPlatform()
+        val controller = controller(client, policy = policy, platform = platform)
+        val original = request()
+        start(controller, original)
+        val media = checkNotNull(client.lastCall?.lastMediaSession)
+        val serviceStarts = platform.startForegroundServiceCount
+        permitted = false
+        controller.setCameraPermissionGranted(true, original)
+        runCurrent()
+        assertThat(media.cameraEnabledCalls).isEmpty()
+        assertThat(platform.startForegroundServiceCount).isEqualTo(serviceStarts)
+        assertThat(controller.state.value).isNull()
+    }
+
     private suspend fun TestScope.lateMedia(): MediaFixture {
         val gate = CompletableDeferred<Result<MatrixRtcMediaSession>>()
         val oldCall = FakeMatrixRtcCall(A_ROOM_ID, "m.call#room").apply {
@@ -377,9 +396,10 @@ class DefaultElementCallControllerOwnershipTest {
         client: MatrixRtcClient = FakeMatrixRtcClient(),
         listener: FakeElementCallLifecycleListener = FakeElementCallLifecycleListener(),
         policy: ElementCallRequestLifecycle = NoOpElementCallRequestLifecycle,
+        platform: FakeElementCallPlatform = FakeElementCallPlatform(),
     ) = DefaultElementCallController(
         scope = backgroundScope,
-        platform = FakeElementCallPlatform(),
+        platform = platform,
         rtcClient = client,
         audioDeviceController = FakeCallAudioDeviceController(),
         audioFocus = FakeAudioFocus(requestAudioFocusResult = {}, releaseAudioFocusResult = {}),
