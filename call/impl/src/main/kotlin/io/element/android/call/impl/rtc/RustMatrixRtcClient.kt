@@ -27,6 +27,7 @@ import kotlinx.coroutines.withTimeout
 import org.matrix.rtc.FfiMembershipFormat
 import org.matrix.rtc.FfiRoomOptions
 import org.matrix.rtc.MatrixBackend
+import org.matrix.rtc.MembershipBackendFactory
 import org.matrix.rtc.RtcClient
 import timber.log.Timber
 import org.matrix.rtc.supportedVideoCodecs as ffiSupportedVideoCodecs
@@ -38,6 +39,7 @@ import org.matrix.rtc.supportedVideoCodecs as ffiSupportedVideoCodecs
  */
 internal class RustMatrixRtcClient(
     private val backend: MatrixBackend,
+    private val membershipFactory: MembershipBackendFactory?,
     private val dispatchers: ElementCallDispatchers,
     /** Only reaches as far as the camera, via the room, the call and then the media session. */
     private val context: Context,
@@ -52,7 +54,7 @@ internal class RustMatrixRtcClient(
     @Synchronized
     private fun rtcClient(): RtcClient = rtcClient ?: run {
         MatrixRtcFfi.ensureInitialized()
-        RtcClient(backend).also { rtcClient = it }
+        (membershipFactory?.let { RtcClient.newWithMembershipFactory(backend, it) } ?: RtcClient(backend)).also { rtcClient = it }
     }
 
     override suspend fun room(roomId: RoomId, format: MatrixRtcMembershipFormat): Result<MatrixRtcRoom> = runCatchingExceptions {

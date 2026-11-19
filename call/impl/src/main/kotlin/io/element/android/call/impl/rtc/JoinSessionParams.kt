@@ -7,6 +7,7 @@
 
 package io.element.android.call.impl.rtc
 
+import io.element.android.call.api.MembershipRequestId
 import io.element.android.call.api.rtc.MatrixRtcCallIntent
 import io.element.android.call.api.rtc.MatrixRtcCallKind
 import io.element.android.call.api.rtc.MatrixRtcGroupNotify
@@ -24,7 +25,9 @@ private const val KEEP_ALIVE_TIMEOUT_MS = 20_000uL
 internal fun MatrixRtcCallKind.toJoinSessionParams(
     applicationSlotId: String?,
     requestedIntent: MatrixRtcCallIntent?,
+    membershipRequestId: MembershipRequestId?,
 ) = FfiJoinSessionParams(
+    requestScopeId = membershipRequestId?.value,
     applicationSlotId = applicationSlotId,
     // The core picks from the backend's `rtcTransports`, and fails the join when there is none.
     transport = FfiJoinTransport.Advertised,

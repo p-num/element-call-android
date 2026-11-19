@@ -7,6 +7,7 @@
 
 package io.element.android.call.test
 
+import io.element.android.call.api.MembershipRequestId
 import io.element.android.call.api.rtc.MatrixRtcAudioLevel
 import io.element.android.call.api.rtc.MatrixRtcCall
 import io.element.android.call.api.rtc.MatrixRtcCallEnd
@@ -45,8 +46,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.flow
 
 class FakeMatrixRtcClient(
-    private val roomResult: () -> Result<MatrixRtcRoom>? = { null },
-    private val joinResult: () -> Result<MatrixRtcCall>? = { null },
+    private val roomResult: suspend () -> Result<MatrixRtcRoom>? = { null },
+    private val joinResult: suspend () -> Result<MatrixRtcCall>? = { null },
     /** Completed by a test to let a join return; a join waits on it while it is pending. */
     private val joinGate: CompletableDeferred<Unit>? = null,
     /** What the existing call's members agree on, when they agree on a known intent. */
@@ -88,7 +89,7 @@ class FakeMatrixRtcClient(
 
 class FakeMatrixRtcRoom(
     override val roomId: RoomId,
-    private val joinResult: () -> Result<MatrixRtcCall>? = { null },
+    private val joinResult: suspend () -> Result<MatrixRtcCall>? = { null },
     private val joinGate: CompletableDeferred<Unit>? = null,
     private val callIntent: MatrixRtcCallIntent? = null,
 ) : MatrixRtcRoom {
@@ -100,6 +101,8 @@ class FakeMatrixRtcRoom(
         private set
     var lastCallIntent: MatrixRtcCallIntent? = null
         private set
+    var lastMembershipRequestId: MembershipRequestId? = null
+        private set
     var shutdownCount = 0
         private set
 
@@ -107,10 +110,12 @@ class FakeMatrixRtcRoom(
         kind: MatrixRtcCallKind,
         applicationSlotId: String?,
         requestedIntent: MatrixRtcCallIntent?,
+        membershipRequestId: MembershipRequestId?,
     ): Result<MatrixRtcCall> {
         joinCallCount++
         lastKind = kind
         lastCallIntent = requestedIntent
+        lastMembershipRequestId = membershipRequestId
         joinGate?.await()
         joinResult()?.let { return it }
         val intent = requestedIntent ?: kind.startedIntent() ?: callIntent ?: MatrixRtcCallIntent.VIDEO
@@ -194,6 +199,7 @@ class FakeMatrixRtcCall(
 
     /** What [connectMedia] fails with instead of connecting; null connects. */
     var connectMediaFailure: Throwable? = null
+    var connectMediaResult: (suspend () -> Result<MatrixRtcMediaSession>)? = null
 
     /** The session [connectMedia] connects: a harness gives it pictures and our own tile. */
     var newMediaSession: () -> FakeMatrixRtcMediaSession = { FakeMatrixRtcMediaSession() }
@@ -209,6 +215,7 @@ class FakeMatrixRtcCall(
         lastVideoCodec = videoCodec
         connectMediaCount++
         onConnectMedia()
+        connectMediaResult?.let { return it() }
         connectMediaFailure?.let { return Result.failure(it) }
         return Result.success(newMediaSession().also { lastMediaSession = it }).also {
             if (status.value == MatrixRtcCallStatus.Connecting) status.value = MatrixRtcCallStatus.Connected(connectedSinceMs, degraded = false)
@@ -224,7 +231,12 @@ class FakeMatrixRtcCall(
         }
     }
 
-    override fun close() = Unit
+    var closeCount = 0
+        private set
+
+    override fun close() {
+        closeCount++
+    }
 }
 
 class FakeMatrixRtcMediaSession(
@@ -445,5 +457,10 @@ class FakeMatrixRtcMediaSession(
         return Result.success(Unit)
     }
 
-    override fun close() = Unit
+    var closeCount = 0
+        private set
+
+    override fun close() {
+        closeCount++
+    }
 }

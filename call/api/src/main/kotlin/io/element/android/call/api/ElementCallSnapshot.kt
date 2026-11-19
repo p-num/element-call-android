@@ -40,6 +40,7 @@ import kotlinx.collections.immutable.persistentSetOf
 data class ElementCallSnapshot(
     val callData: ElementCallData,
     val connection: ElementCallConnection,
+    val membershipRequestId: MembershipRequestId = callData.membershipRequestId,
     /** Our microphone is published and our publishing connection is healthy, after the call connected. */
     val isMediaConnected: Boolean = false,
     /**
@@ -182,6 +183,10 @@ data class ElementCallSnapshot(
     /** Members the core has reported unable to decrypt for long enough that their tile says the keys are missing (034 Q8). */
     val membersMissingKeys: ImmutableSet<String> = persistentSetOf(),
 ) {
+    init {
+        require(membershipRequestId === callData.membershipRequestId)
+    }
+
     /**
      * Whether anybody in the call is sending a picture - a camera or a screen, ours or theirs.
      *

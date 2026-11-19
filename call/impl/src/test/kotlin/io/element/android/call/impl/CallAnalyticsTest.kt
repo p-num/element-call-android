@@ -16,6 +16,7 @@ import io.element.android.call.api.ElementCallOptions
 import io.element.android.call.api.ElementCallRoomContext
 import io.element.android.call.api.ElementCallRoomContextProvider
 import io.element.android.call.api.ElementCallSnapshot
+import io.element.android.call.api.NoOpElementCallRequestLifecycle
 import io.element.android.call.api.NoOpElementCallRoomContextProvider
 import io.element.android.call.api.analytics.ElementCallAnalytics
 import io.element.android.call.api.analytics.ElementCallAnalyticsCallKind
@@ -717,6 +718,7 @@ class CallAnalyticsTest {
             audioDeviceController = FakeCallAudioDeviceController(),
             audioFocus = FakeAudioFocus(requestAudioFocusResult = {}, releaseAudioFocusResult = {}),
             lifecycleListener = FakeElementCallLifecycleListener(),
+            requestLifecycle = NoOpElementCallRequestLifecycle,
             roomContextProvider = roomContextProvider ?: NoOpElementCallRoomContextProvider,
             options = ElementCallOptions(),
             preferencesStore = FakeElementCallPreferencesStore(),

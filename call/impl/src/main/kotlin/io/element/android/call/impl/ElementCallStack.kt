@@ -13,8 +13,10 @@ import io.element.android.call.api.ElementCallDispatchers
 import io.element.android.call.api.ElementCallLifecycleListener
 import io.element.android.call.api.ElementCallOptions
 import io.element.android.call.api.ElementCallPreferencesStore
+import io.element.android.call.api.ElementCallRequestLifecycle
 import io.element.android.call.api.ElementCallRoomContextProvider
 import io.element.android.call.api.NoOpElementCallLifecycleListener
+import io.element.android.call.api.NoOpElementCallRequestLifecycle
 import io.element.android.call.api.NoOpElementCallRoomContextProvider
 import io.element.android.call.api.analytics.ElementCallAnalytics
 import io.element.android.call.api.analytics.NoOpElementCallAnalytics
@@ -27,6 +29,7 @@ import io.element.android.call.impl.rtc.MatrixRtcFfi
 import io.element.android.call.impl.rtc.RustMatrixRtcClient
 import kotlinx.coroutines.CoroutineScope
 import org.matrix.rtc.MatrixBackend
+import org.matrix.rtc.MembershipBackendFactory
 
 /**
  * Everything the native call needs for one Matrix session, built by hand: no dependency-injection
@@ -61,6 +64,7 @@ class ElementCallStack private constructor(
         private val context: Context = context.applicationContext
         private var roomContextProvider: ElementCallRoomContextProvider = NoOpElementCallRoomContextProvider
         private var lifecycleListener: ElementCallLifecycleListener = NoOpElementCallLifecycleListener
+        private var membershipRequests: MembershipRequests? = null
         private var analytics: ElementCallAnalytics = NoOpElementCallAnalytics
         private var audioDeviceController: CallAudioDeviceController? = null
         private var audioFocus: AudioFocus? = null
@@ -74,6 +78,11 @@ class ElementCallStack private constructor(
 
         /** Call started, joined and ended, and whether the app is in the foreground. Defaults to a no-op. */
         fun lifecycleListener(listener: ElementCallLifecycleListener) = apply { lifecycleListener = listener }
+
+        /** Bind membership writes and controller retirement to the same host request owner. */
+        fun membershipBackends(factory: MembershipBackendFactory, lifecycle: ElementCallRequestLifecycle) = apply {
+            membershipRequests = MembershipRequests(factory, lifecycle)
+        }
 
         /** Where the call's analytics go (feature-hq 044); the host forwards them, or not. Defaults to dropping them. */
         fun analytics(analytics: ElementCallAnalytics) = apply { this.analytics = analytics }
@@ -107,6 +116,7 @@ class ElementCallStack private constructor(
             options.logging?.let { MatrixRtcFfi.setLoggingConfiguration(it) }
             val rtcClient = rtcClient ?: RustMatrixRtcClient(
                 backend = backend,
+                membershipFactory = membershipRequests?.factory,
                 dispatchers = dispatchers,
                 context = context,
                 sessionCoroutineScope = scope,
@@ -118,6 +128,7 @@ class ElementCallStack private constructor(
                 audioDeviceController = audioDeviceController ?: DefaultCallAudioDeviceController(context),
                 audioFocus = audioFocus ?: DefaultAudioFocus(context),
                 lifecycleListener = lifecycleListener,
+                requestLifecycle = membershipRequests?.lifecycle ?: NoOpElementCallRequestLifecycle,
                 roomContextProvider = roomContextProvider,
                 options = options,
                 preferencesStore = preferencesStore ?: DefaultElementCallPreferencesStore(context),
@@ -125,5 +136,9 @@ class ElementCallStack private constructor(
             )
             return ElementCallStack(controller, options).also { ElementCallStackRegistry.register(it) }
         }
+        private data class MembershipRequests(
+            val factory: MembershipBackendFactory,
+            val lifecycle: ElementCallRequestLifecycle,
+        )
     }
 }

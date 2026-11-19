@@ -20,6 +20,7 @@ import io.element.android.call.api.ElementCallOptions
 import io.element.android.call.api.ElementCallPreferences
 import io.element.android.call.api.ElementCallRoomContext
 import io.element.android.call.api.ElementCallWindowRect
+import io.element.android.call.api.NoOpElementCallRequestLifecycle
 import io.element.android.call.api.analytics.NoOpElementCallAnalytics
 import io.element.android.call.api.rtc.MatrixRtcAudioLevel
 import io.element.android.call.api.rtc.MatrixRtcCallEnd
@@ -2667,6 +2668,7 @@ class DefaultElementCallControllerTest {
             audioDeviceController = audioDeviceController,
             audioFocus = audioFocus,
             lifecycleListener = lifecycleListener,
+            requestLifecycle = NoOpElementCallRequestLifecycle,
             roomContextProvider = roomContextProvider,
             options = ElementCallOptions(
                 isScreenSharingEnabled = isScreenSharingEnabled,

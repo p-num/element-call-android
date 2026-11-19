@@ -26,4 +26,7 @@ data class ElementCallData(
     val isStartingCall: Boolean,
     /** True when [isAudioCall] is an explicit start or answer choice; false for a generic room join. */
     val hasExplicitCallIntent: Boolean = isStartingCall,
-)
+) {
+    /** A copy is another request, while equality continues to describe the same call choices. */
+    val membershipRequestId: MembershipRequestId = MembershipRequestId.fresh()
+}

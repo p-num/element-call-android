@@ -9,6 +9,7 @@ package io.element.android.call.impl.rtc
 
 import android.content.Context
 import io.element.android.call.api.ElementCallDispatchers
+import io.element.android.call.api.MembershipRequestId
 import io.element.android.call.api.rtc.MatrixRtcCall
 import io.element.android.call.api.rtc.MatrixRtcCallIntent
 import io.element.android.call.api.rtc.MatrixRtcCallKind
@@ -44,11 +45,12 @@ internal class RustMatrixRtcRoom(
         kind: MatrixRtcCallKind,
         applicationSlotId: String?,
         requestedIntent: MatrixRtcCallIntent?,
+        membershipRequestId: MembershipRequestId?,
     ): Result<MatrixRtcCall> = runCatchingExceptions {
         mutex.withLock {
             check(!isShutdown) { "Room $roomId is shut down" }
             val rtcCall = withContext(ffiDispatcher) {
-                joinCallTyped(kind.toJoinSessionParams(applicationSlotId, requestedIntent))
+                joinCallTyped(kind.toJoinSessionParams(applicationSlotId, requestedIntent, membershipRequestId))
             }
             Timber.d(
                 "MatrixRTC: joined $roomId/${rtcCall.slotId()}, member id ${rtcCall.memberId()}" +

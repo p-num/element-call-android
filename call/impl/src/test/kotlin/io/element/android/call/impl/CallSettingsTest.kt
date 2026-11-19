@@ -14,6 +14,7 @@ import io.element.android.call.api.ElementCallFailure
 import io.element.android.call.api.ElementCallOptions
 import io.element.android.call.api.ElementCallPreferences
 import io.element.android.call.api.ElementCallRoomContext
+import io.element.android.call.api.NoOpElementCallRequestLifecycle
 import io.element.android.call.api.analytics.NoOpElementCallAnalytics
 import io.element.android.call.api.rtc.MatrixRtcCallEvent
 import io.element.android.call.api.rtc.MatrixRtcJoinException
@@ -276,6 +277,7 @@ class CallSettingsTest {
             audioDeviceController = FakeCallAudioDeviceController(),
             audioFocus = FakeAudioFocus(requestAudioFocusResult = {}, releaseAudioFocusResult = {}),
             lifecycleListener = FakeElementCallLifecycleListener(),
+            requestLifecycle = NoOpElementCallRequestLifecycle,
             roomContextProvider = FakeElementCallRoomContextProvider(
                 roomContext = ElementCallRoomContext(displayName = "A room", isDm = false, members = emptyMap()),
             ),
