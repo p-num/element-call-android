@@ -647,12 +647,13 @@ class CallAnalyticsTest {
 
     @Test
     fun `the call runs the same with no receiver as with one`() = runTest {
+        val request = ElementCallData(roomId = A_ROOM_ID, isAudioCall = true, isStartingCall = true)
         suspend fun TestScope.snapshots(analytics: ElementCallAnalytics): List<ElementCallSnapshot?> {
             val seen = mutableListOf<ElementCallSnapshot?>()
             val rtcClient = FakeMatrixRtcClient()
             val controller = createController(rtcClient = rtcClient, analytics = analytics, start = false)
             val job = backgroundScope.launch { controller.state.collect { seen += it } }
-            controller.startCall(ElementCallData(roomId = A_ROOM_ID, isAudioCall = true, isStartingCall = true))
+            controller.startCall(request)
             runCurrent()
             controller.setMicrophonePermissionGranted(true)
             runCurrent()
