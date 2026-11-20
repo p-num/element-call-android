@@ -99,6 +99,7 @@ fun ElementCallOverlay(
                 ) {
                     ElementCallMinimizedBar(
                         call = current,
+                        outgoingRingText = if (isBarVisible) current.outgoingRingText(controller) else null,
                         onToggleMicrophone = { controller.setMicrophoneMuted(!current.isMicrophoneMuted) },
                         onHangUp = controller::hangUp,
                         onClick = {

@@ -309,6 +309,7 @@ fun rememberElementCallScreenState(
         ?.let { candidate -> tiles.firstOrNull { it.id == candidate.id }?.tileId }
 
     return current.toState(
+        outgoingRingText = current?.takeIf { it.isMaximized }?.outgoingRingText(controller),
         videoFrames = videoFrames,
         tiles = tiles,
         spotlight = spotlight,
@@ -409,6 +410,7 @@ private const val RINGING_TILE_PREFIX = "ringing:"
  * next: the controller has been asked for a call and the microphone is the first thing it needs.
  */
 private fun ElementCallSnapshot?.toState(
+    outgoingRingText: String?,
     videoFrames: ImmutableMap<String, Flow<MatrixRtcVideoFrame>>,
     tiles: ImmutableList<CallTileData>,
     spotlight: CallSpotlight.Choice,
@@ -427,6 +429,7 @@ private fun ElementCallSnapshot?.toState(
     isDeveloperModeEnabled: Boolean,
     eventSink: (ElementCallScreenEvent) -> Unit,
 ) = ElementCallScreenState(
+    outgoingRingText = outgoingRingText,
     connection = this?.connection ?: ElementCallConnection.RequestingPermission,
     isAudioCall = this?.callData?.isAudioCall == true,
     memberCount = this?.memberCount ?: 0,

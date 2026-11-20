@@ -22,6 +22,7 @@ import io.element.android.call.api.rtc.MatrixRtcMembershipFormat
 import io.element.android.call.api.rtc.MatrixRtcParticipant
 import io.element.android.call.api.rtc.MatrixRtcReactionKind
 import io.element.android.call.api.rtc.MatrixRtcReceiveStats
+import io.element.android.call.api.rtc.MatrixRtcRingPhase
 import io.element.android.call.api.rtc.MatrixRtcStreamKind
 import io.element.android.call.api.rtc.MatrixRtcStreamRef
 import io.element.android.call.api.rtc.MatrixRtcStreamState
@@ -43,13 +44,13 @@ open class ElementCallScreenStatePreviewParam : PreviewParameterProvider<Element
             anElementCallScreenState(connection = ElementCallConnection.ConnectingMedia, memberCount = 2),
             // A DM video call ringing, our camera on; a voice call ringing; a ring that could not be sent (030).
             anElementCallScreenState(
-                connection = ElementCallConnection.Calling(A_CALLEE, isRinging = true),
+                connection = ElementCallConnection.Calling(A_CALLEE, A_RING),
                 participants = listOf(aLocalParticipant()),
                 isCameraEnabled = true,
                 isDm = true,
             ),
             anElementCallScreenState(
-                connection = ElementCallConnection.Calling(A_CALLEE, isRinging = true),
+                connection = ElementCallConnection.Calling(A_CALLEE, A_RING),
                 isAudioCall = true,
                 participants = listOf(aLocalParticipant()),
                 isDm = true,
@@ -627,3 +628,4 @@ private fun previewCallTiles(
     .toImmutableList()
 
 private val A_CALLEE = UserId("@paulina:example.org")
+private val A_RING = MatrixRtcRingPhase.Ringing(sentAtMs = 0L, lifetimeMs = 90_000L, eventId = null)

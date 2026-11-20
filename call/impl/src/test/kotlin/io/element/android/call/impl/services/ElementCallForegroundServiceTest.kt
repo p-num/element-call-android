@@ -12,6 +12,7 @@ import com.google.common.truth.Truth.assertThat
 import io.element.android.call.api.ElementCallConnection
 import io.element.android.call.api.ElementCallData
 import io.element.android.call.api.ElementCallSnapshot
+import io.element.android.call.api.rtc.MatrixRtcRingPhase
 import io.element.android.call.test.A_ROOM_ID
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.test.runTest
@@ -57,7 +58,7 @@ class ElementCallForegroundServiceTest {
         val state = MutableStateFlow<ElementCallSnapshot?>(aCall(connection = ElementCallConnection.Joining))
 
         state.notificationContentChanges().test {
-            state.value = aCall(connection = ElementCallConnection.Calling(callee = null, isRinging = false))
+            state.value = aCall(connection = ElementCallConnection.Calling(callee = null, ring = MatrixRtcRingPhase.Sending))
             assertThat(awaitItem().isCalling).isTrue()
             state.value = aCall(connection = ElementCallConnection.Connected).copy(connectedAtElapsedMs = 1_234L)
             assertThat(awaitItem()).isEqualTo(NotificationContent(roomName = A_ROOM_NAME, isMuted = false, isCalling = false, connectedAtElapsedMs = 1_234L))

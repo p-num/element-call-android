@@ -117,7 +117,7 @@ class SampleRingingCall(context: Context, private val scope: CoroutineScope, pri
         val sentAt = System.currentTimeMillis()
         call.status.value = MatrixRtcCallStatus.Calling(
             BOB,
-            MatrixRtcRingPhase.Ringing(sentAtMs = sentAt, lifetimeMs = RING_LIFETIME.inWholeMilliseconds),
+            MatrixRtcRingPhase.Ringing(sentAtMs = sentAt, lifetimeMs = RING_LIFETIME.inWholeMilliseconds, eventId = null),
             MatrixRtcMediaPhase.Connected(degraded = false),
         )
         delay(RING_LIFETIME)

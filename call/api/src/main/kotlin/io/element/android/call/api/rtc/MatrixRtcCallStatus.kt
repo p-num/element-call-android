@@ -7,6 +7,7 @@
 
 package io.element.android.call.api.rtc
 
+import io.element.android.call.api.rtc.id.EventId
 import io.element.android.call.api.rtc.id.UserId
 
 /**
@@ -39,8 +40,8 @@ sealed interface MatrixRtcRingPhase {
     /** Being sent: we are calling, without a ringback yet. */
     data object Sending : MatrixRtcRingPhase
 
-    /** Sent at [sentAtMs] (ms since the Unix epoch), ringing for [lifetimeMs]. */
-    data class Ringing(val sentAtMs: Long, val lifetimeMs: Long) : MatrixRtcRingPhase
+    /** Sent at [sentAtMs] (ms since the Unix epoch), ringing for [lifetimeMs]. A null [eventId] means the ID is unavailable. */
+    data class Ringing(val sentAtMs: Long, val lifetimeMs: Long, val eventId: EventId?) : MatrixRtcRingPhase
 }
 
 /** How far our own media has got. */

@@ -53,6 +53,7 @@ import io.element.android.call.api.rtc.MatrixRtcTileId
 import io.element.android.call.api.rtc.MatrixRtcTileKind
 import io.element.android.call.api.rtc.MatrixRtcUnableToDecrypt
 import io.element.android.call.api.rtc.MatrixRtcVideoCodec
+import io.element.android.call.api.rtc.id.EventId
 import io.element.android.call.api.rtc.id.UserId
 import io.element.android.call.impl.audio.CallSoundEffect
 import io.element.android.call.test.A_ROOM_ID
@@ -470,7 +471,7 @@ class DefaultElementCallControllerTest {
         val call = FakeMatrixRtcCall(A_ROOM_ID, "m.call#room")
         val calling = MatrixRtcCallStatus.Calling(
             callee = UserId("@callee:example.org"),
-            ring = MatrixRtcRingPhase.Ringing(sentAtMs = 0L, lifetimeMs = 90_000L),
+            ring = MatrixRtcRingPhase.Ringing(sentAtMs = 0L, lifetimeMs = 90_000L, eventId = null),
             media = MatrixRtcMediaPhase.Connected(degraded = false),
         )
         call.status.value = calling
@@ -480,7 +481,7 @@ class DefaultElementCallControllerTest {
         controller.setMicrophonePermissionGranted(true)
         runCurrent()
 
-        assertThat(controller.state.value?.connection).isEqualTo(ElementCallConnection.Calling(calling.callee, isRinging = true))
+        assertThat(controller.state.value?.connection).isEqualTo(ElementCallConnection.Calling(calling.callee, calling.ring))
         assertThat(controller.state.value?.connectedAtElapsedMs).isNull()
 
         // Picked up three seconds ago, on the core's wall clock.
@@ -501,11 +502,12 @@ class DefaultElementCallControllerTest {
 
         call.status.value = MatrixRtcCallStatus.Calling(callee, MatrixRtcRingPhase.Sending, MatrixRtcMediaPhase.Connecting)
         runCurrent()
-        assertThat(controller.state.value?.connection).isEqualTo(ElementCallConnection.Calling(callee, isRinging = false))
+        assertThat(controller.state.value?.connection).isEqualTo(ElementCallConnection.Calling(callee, MatrixRtcRingPhase.Sending))
 
-        call.status.value = MatrixRtcCallStatus.Calling(callee, MatrixRtcRingPhase.Ringing(0L, 90_000L), MatrixRtcMediaPhase.Connecting)
+        val ring = MatrixRtcRingPhase.Ringing(sentAtMs = 0L, lifetimeMs = 90_000L, eventId = null)
+        call.status.value = MatrixRtcCallStatus.Calling(callee, ring, MatrixRtcMediaPhase.Connecting)
         runCurrent()
-        assertThat(controller.state.value?.connection).isEqualTo(ElementCallConnection.Calling(callee, isRinging = true))
+        assertThat(controller.state.value?.connection).isEqualTo(ElementCallConnection.Calling(callee, ring))
 
         call.status.value = MatrixRtcCallStatus.Connected(sinceMs = 0L, degraded = false)
         runCurrent()
@@ -521,8 +523,106 @@ class DefaultElementCallControllerTest {
         controller.setMicrophonePermissionGranted(true)
         runCurrent()
 
-        assertThat(controller.state.value?.connection).isEqualTo(ElementCallConnection.Calling(callee = null, isRinging = false))
+        assertThat(controller.state.value?.connection).isEqualTo(ElementCallConnection.Calling(callee = null, ring = MatrixRtcRingPhase.Sending))
         joinGate.complete(Unit)
+    }
+
+    @Test
+    fun `ring identity survives media revisions and clears at pickup into Connecting`() = runTest {
+        val callee = UserId("@callee:example.org")
+        val call = FakeMatrixRtcCall(A_ROOM_ID, "m.call#room").apply {
+            status.value = MatrixRtcCallStatus.Calling(callee, MatrixRtcRingPhase.Sending, MatrixRtcMediaPhase.Connecting)
+        }
+        val platform = FakeElementCallPlatform()
+        val controller = createController(rtcClient = FakeMatrixRtcClient(joinResult = { Result.success(call) }), platform = platform, roomIsDm = true)
+        controller.setMicrophonePermissionGranted(true)
+        runCurrent()
+        val renderer = platform.soundEffectRenderers.single()
+        val ring = MatrixRtcRingPhase.Ringing(sentAtMs = 2_000L, lifetimeMs = 90_000L, eventId = EventId("\$first-ring-from-server"))
+
+        val mediaRevisions = listOf(
+            MatrixRtcMediaPhase.Connecting,
+            MatrixRtcMediaPhase.Connected(degraded = false),
+            MatrixRtcMediaPhase.Connected(degraded = true),
+            MatrixRtcMediaPhase.Connected(degraded = false),
+        )
+        for (media in mediaRevisions) {
+            call.status.value = MatrixRtcCallStatus.Calling(callee, ring, media)
+            runCurrent()
+
+            assertThat(controller.state.value?.connection).isEqualTo(ElementCallConnection.Calling(callee, ring = ring))
+            assertThat(controller.state.value?.isMediaConnected).isFalse()
+            assertThat(renderer.looping).isEqualTo(CallSoundEffect.RINGBACK)
+        }
+
+        call.status.value = MatrixRtcCallStatus.Connecting
+        runCurrent()
+
+        assertThat(controller.state.value?.connection).isEqualTo(ElementCallConnection.ConnectingMedia)
+        assertThat(renderer.looping).isNull()
+    }
+
+    @Test
+    fun `pickup coalesced with ring acknowledgement skips the ringing snapshot`() = runTest {
+        val callee = UserId("@callee:example.org")
+        val call = FakeMatrixRtcCall(A_ROOM_ID, "m.call#room").apply {
+            status.value = MatrixRtcCallStatus.Calling(callee, MatrixRtcRingPhase.Sending, MatrixRtcMediaPhase.Connecting)
+        }
+        val platform = FakeElementCallPlatform()
+        val controller = createController(rtcClient = FakeMatrixRtcClient(joinResult = { Result.success(call) }), platform = platform, roomIsDm = true)
+        controller.setMicrophonePermissionGranted(true)
+        runCurrent()
+
+        controller.state.test {
+            assertThat(awaitItem()?.connection).isEqualTo(ElementCallConnection.Calling(callee, ring = MatrixRtcRingPhase.Sending))
+            val ring = MatrixRtcRingPhase.Ringing(sentAtMs = 2_000L, lifetimeMs = 90_000L, eventId = EventId("\$first-ring-from-server"))
+            call.status.value = MatrixRtcCallStatus.Calling(callee, ring, MatrixRtcMediaPhase.Connecting)
+            call.status.value = MatrixRtcCallStatus.Connecting
+            runCurrent()
+
+            assertThat(awaitItem()?.connection).isEqualTo(ElementCallConnection.ConnectingMedia)
+            assertThat(platform.soundEffectRenderers.single().looping).isNull()
+            expectNoEvents()
+        }
+    }
+
+    @Test
+    fun `a late ring from the retired call cannot reach a same-room redial`() = runTest {
+        val callee = UserId("@callee:example.org")
+        val sending = MatrixRtcCallStatus.Calling(callee, MatrixRtcRingPhase.Sending, MatrixRtcMediaPhase.Connecting)
+        val first = FakeMatrixRtcCall(A_ROOM_ID, "m.call#room").apply { status.value = sending }
+        val second = FakeMatrixRtcCall(A_ROOM_ID, "m.call#room").apply { status.value = sending }
+        val calls = ArrayDeque(listOf(first, second))
+        val controller = createController(rtcClient = FakeMatrixRtcClient(joinResult = { Result.success(calls.removeFirst()) }), roomIsDm = true)
+        controller.setMicrophonePermissionGranted(true)
+        runCurrent()
+        val firstRequest = requireNotNull(controller.state.value).callData
+        val replacement = firstRequest.copy()
+        val acknowledgement = CompletableDeferred<Result<Unit>>()
+        first.leaveResult = { acknowledgement.await() }
+        val departure = async { controller.hangUpAndWait(firstRequest) }
+        runCurrent()
+        assertThat(departure.isCompleted).isFalse()
+
+        controller.startCall(replacement)
+        runCurrent()
+        controller.setMicrophonePermissionGranted(true)
+        runCurrent()
+        val staleRing = MatrixRtcRingPhase.Ringing(sentAtMs = 2_000L, lifetimeMs = 90_000L, eventId = EventId("\$first-ring-from-server"))
+        first.status.value = sending.copy(ring = staleRing)
+        runCurrent()
+
+        assertThat(controller.state.value?.callData).isSameInstanceAs(replacement)
+        assertThat(controller.state.value?.connection).isEqualTo(ElementCallConnection.Calling(callee, ring = MatrixRtcRingPhase.Sending))
+
+        val newRing = MatrixRtcRingPhase.Ringing(sentAtMs = 3_000L, lifetimeMs = 90_000L, eventId = EventId("\$second-ring-from-server"))
+        second.status.value = sending.copy(ring = newRing)
+        acknowledgement.complete(Result.success(Unit))
+        assertThat(departure.await()).isTrue()
+        runCurrent()
+
+        assertThat(controller.state.value?.callData).isSameInstanceAs(replacement)
+        assertThat(controller.state.value?.connection).isEqualTo(ElementCallConnection.Calling(callee, ring = newRing))
     }
 
     /** 030 R4: the caller is told, and the call has already been left by the core. */
@@ -590,7 +690,7 @@ class DefaultElementCallControllerTest {
     }
 
     @Test
-    fun `the ringback loops while it rings and stops at pickup`() = runTest {
+    fun `ringback loops without a ring identity and stops at pickup`() = runTest {
         val rtcClient = FakeMatrixRtcClient()
         val platform = FakeElementCallPlatform()
         val controller = createController(rtcClient = rtcClient, platform = platform, roomIsDm = true)
@@ -605,8 +705,12 @@ class DefaultElementCallControllerTest {
         // Not before the ring has gone out (030 R4).
         assertThat(renderer.looping).isNull()
 
-        call.status.value = MatrixRtcCallStatus.Calling(callee, MatrixRtcRingPhase.Ringing(0L, 90_000L), MatrixRtcMediaPhase.Connecting)
+        val ring = MatrixRtcRingPhase.Ringing(sentAtMs = 2_000L, lifetimeMs = 90_000L, eventId = null)
+        call.status.value = MatrixRtcCallStatus.Calling(callee, ring, MatrixRtcMediaPhase.Connecting)
         runCurrent()
+        val connection = controller.state.value?.connection as ElementCallConnection.Calling
+        assertThat(connection).isEqualTo(ElementCallConnection.Calling(callee, ring = ring))
+        assertThat(connection.isRinging).isTrue()
         assertThat(renderer.looping).isEqualTo(CallSoundEffect.RINGBACK)
 
         call.status.value = MatrixRtcCallStatus.Connected(sinceMs = 0L, degraded = false)

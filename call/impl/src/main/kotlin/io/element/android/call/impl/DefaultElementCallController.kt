@@ -777,7 +777,7 @@ internal class DefaultElementCallController(
         if (!withCurrentRequest(callData) {
             attempt.attempted(callKindOf(isDm = kind is MatrixRtcCallKind.Direct))
             if (kind is MatrixRtcCallKind.Direct && kind.ring != null) {
-                updateState(callData) { it.copy(connection = ElementCallConnection.Calling(callee = null, isRinging = false)) }
+                updateState(callData) { it.copy(connection = ElementCallConnection.Calling(callee = null, ring = MatrixRtcRingPhase.Sending)) }
             }
         }) {
             return
@@ -944,7 +944,7 @@ internal class DefaultElementCallController(
                     ) { it.copy(connection = ElementCallConnection.ConnectingMedia, isMediaConnected = false) }
                     is MatrixRtcCallStatus.Calling -> updateState(callData) {
                         it.copy(
-                            connection = ElementCallConnection.Calling(status.callee, isRinging = status.ring is MatrixRtcRingPhase.Ringing),
+                            connection = ElementCallConnection.Calling(status.callee, status.ring),
                             isMediaConnected = false,
                         )
                     }

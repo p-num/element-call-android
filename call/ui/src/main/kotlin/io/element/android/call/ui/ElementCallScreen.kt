@@ -82,6 +82,7 @@ import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.stateDescription
@@ -530,14 +531,14 @@ private fun CallTopBar(state: ElementCallScreenState, modifier: Modifier = Modif
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
-            if (state.connection is ElementCallConnection.Calling) CallingLabel(isAudioCall = state.isAudioCall)
+            if (state.connection is ElementCallConnection.Calling) CallingLabel(isAudioCall = state.isAudioCall, outgoingRingText = state.outgoingRingText)
         }
     }
 }
 
 /** "Calling…" with the call's type, under the room's name while a DM call rings (030 R14). */
 @Composable
-private fun CallingLabel(isAudioCall: Boolean) {
+private fun CallingLabel(isAudioCall: Boolean, outgoingRingText: String?) {
     Row(verticalAlignment = Alignment.CenterVertically) {
         Icon(
             imageVector = if (isAudioCall) ElementCallTheme.icons.voiceCall else ElementCallTheme.icons.cameraOn,
@@ -546,10 +547,10 @@ private fun CallingLabel(isAudioCall: Boolean) {
             modifier = Modifier.size(16.dp),
         )
         Text(
-            text = stringResource(R.string.element_call_calling),
+            text = outgoingRingText ?: stringResource(R.string.element_call_calling),
             style = ElementCallTheme.typography.bodySmRegular,
             color = ElementCallTheme.colors.textSecondary,
-            modifier = Modifier.padding(start = 4.dp),
+            modifier = Modifier.padding(start = 4.dp).announceOutgoingRing(outgoingRingText),
         )
     }
 }
@@ -642,7 +643,8 @@ private fun ConnectingPlaceholder(state: ElementCallScreenState) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
-                text = state.connection.label(),
+                text = state.outgoingRingText ?: state.connection.label(),
+                modifier = if (state.outgoingRingText == null) Modifier else Modifier.clearAndSetSemantics {},
                 style = ElementCallTheme.typography.headingMdBold,
                 color = ElementCallTheme.colors.textPrimary,
             )

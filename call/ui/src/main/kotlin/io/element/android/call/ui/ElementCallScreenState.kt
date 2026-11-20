@@ -183,6 +183,7 @@ data class ElementCallScreenState(
     val joiningFormat: MatrixRtcMembershipFormat?,
     /** Whether the settings menu offers Developer options (043 R4). */
     val isDeveloperModeEnabled: Boolean,
+    val outgoingRingText: String? = null,
     val eventSink: (ElementCallScreenEvent) -> Unit,
 ) {
     val spotlightTileId: String? get() = spotlight.tileId

@@ -56,6 +56,16 @@ fun ElementCallMinimizedBar(
     onHangUp: () -> Unit,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
+) = ElementCallMinimizedBar(call, onToggleMicrophone, onHangUp, onClick, modifier, outgoingRingText = null)
+
+@Composable
+internal fun ElementCallMinimizedBar(
+    call: ElementCallSnapshot,
+    onToggleMicrophone: () -> Unit,
+    onHangUp: () -> Unit,
+    onClick: () -> Unit,
+    modifier: Modifier,
+    outgoingRingText: String?,
 ) {
     Surface(
         modifier = modifier.fillMaxWidth(),
@@ -126,7 +136,8 @@ fun ElementCallMinimizedBar(
                         )
                     }
                     Text(
-                        text = call.subtitle(),
+                        text = outgoingRingText ?: call.subtitle(),
+                        modifier = Modifier.announceOutgoingRing(outgoingRingText),
                         style = ElementCallTheme.typography.bodySmRegular,
                         color = ElementCallTheme.colors.onOverlay.copy(alpha = 0.7f),
                         maxLines = 1,

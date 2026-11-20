@@ -32,7 +32,9 @@ import io.element.android.call.api.rtc.MatrixRtcTileKind
 import io.element.android.call.api.rtc.MatrixRtcTileRef
 import io.element.android.call.api.rtc.MatrixRtcTileRoster
 import io.element.android.call.api.rtc.MatrixRtcUnableToDecrypt
+import io.element.android.call.api.rtc.id.EventId
 import io.element.android.call.api.rtc.id.UserId
+import io.element.android.call.impl.util.runCatchingExceptions
 import org.matrix.rtc.FfiCallEnd
 import org.matrix.rtc.FfiCallEvent
 import org.matrix.rtc.FfiCallStatus
@@ -251,7 +253,11 @@ internal fun FfiCallStatus.map(): MatrixRtcCallStatus = when (this) {
 
 private fun FfiRingPhase.map(): MatrixRtcRingPhase = when (this) {
     is FfiRingPhase.Sending -> MatrixRtcRingPhase.Sending
-    is FfiRingPhase.Ringing -> MatrixRtcRingPhase.Ringing(sentAtMs = sentAtMs.toLong(), lifetimeMs = lifetimeMs.toLong())
+    is FfiRingPhase.Ringing -> MatrixRtcRingPhase.Ringing(
+        sentAtMs = sentAtMs.toLong(),
+        lifetimeMs = lifetimeMs.toLong(),
+        eventId = runCatchingExceptions { EventId(eventId) }.getOrNull(),
+    )
 }
 
 private fun FfiMediaPhase.map(): MatrixRtcMediaPhase = when (this) {

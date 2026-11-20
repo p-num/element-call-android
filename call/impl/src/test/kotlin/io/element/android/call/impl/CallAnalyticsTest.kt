@@ -295,7 +295,8 @@ class CallAnalyticsTest {
         assertThat(analytics.anonymous()).containsExactly(attempted(DM))
 
         platform.elapsedRealtimeMs = 2_000
-        call.status.value = MatrixRtcCallStatus.Calling(callee, MatrixRtcRingPhase.Ringing(0L, 90_000L), MatrixRtcMediaPhase.Connected(degraded = false))
+        val ring = MatrixRtcRingPhase.Ringing(sentAtMs = 0L, lifetimeMs = 90_000L, eventId = null)
+        call.status.value = MatrixRtcCallStatus.Calling(callee, ring, MatrixRtcMediaPhase.Connected(degraded = false))
         runCurrent()
         assertThat(analytics.anonymous().last()).isEqualTo(outcome(ElementCallAnalyticsOutcome.CONNECTED, DM))
         assertThat(controller.state.value?.connection).isNotEqualTo(ElementCallConnection.Connected)
@@ -698,7 +699,7 @@ class CallAnalyticsTest {
     private fun aRingingCall() = FakeMatrixRtcCall(A_ROOM_ID, "m.call#room").apply {
         status.value = MatrixRtcCallStatus.Calling(
             UserId("@callee:example.org"),
-            MatrixRtcRingPhase.Ringing(0L, 90_000L),
+            MatrixRtcRingPhase.Ringing(sentAtMs = 0L, lifetimeMs = 90_000L, eventId = null),
             MatrixRtcMediaPhase.Connecting,
         )
     }

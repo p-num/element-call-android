@@ -14,6 +14,7 @@ import io.element.android.call.api.rtc.MatrixRtcFrameEncryptionState
 import io.element.android.call.api.rtc.MatrixRtcMembership
 import io.element.android.call.api.rtc.MatrixRtcMembershipFormat
 import io.element.android.call.api.rtc.MatrixRtcReceiveStats
+import io.element.android.call.api.rtc.MatrixRtcRingPhase
 import io.element.android.call.api.rtc.MatrixRtcSignallingHealth
 import io.element.android.call.api.rtc.MatrixRtcStreamRef
 import io.element.android.call.api.rtc.MatrixRtcTile
@@ -240,7 +241,9 @@ sealed interface ElementCallConnection {
      * A DM call ringing the other person (feature-hq 030), until they pick up. [callee] is null until the
      * core names them, [isRinging] false until the ring has gone out.
      */
-    data class Calling(val callee: UserId?, val isRinging: Boolean) : ElementCallConnection
+    data class Calling(val callee: UserId?, val ring: MatrixRtcRingPhase) : ElementCallConnection {
+        val isRinging: Boolean get() = ring is MatrixRtcRingPhase.Ringing
+    }
 
     /** The ring to [callee] could not be sent, so nobody was called (030 R4). The call is over; the host dismisses it. */
     data class RingNotSent(val callee: UserId?) : ElementCallConnection

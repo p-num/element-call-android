@@ -12,6 +12,8 @@ actually read it. The matrix-rust-rtc core's own history is the core's:
 
 ## Unreleased
 
+- Hosts constructing `ElementCallConnection.Calling` pass the `ring` phase. `MatrixRtcRingPhase.Ringing` carries a nullable
+  `eventId` alongside its timing. Use rebuilt RTC bindings that supply the event ID.
 - Hosts set `ElementCallData.hasExplicitCallIntent` for incoming answers; it defaults to `isStartingCall`, so generic
   room joins follow the existing call's media intent. `MatrixRtcRoom.joinCall` renames `callIntent` to `requestedIntent`.
 - `ElementCallAnalytics.forAttempt` can bind a receiver to one accepted `ElementCallData` before its first event; the

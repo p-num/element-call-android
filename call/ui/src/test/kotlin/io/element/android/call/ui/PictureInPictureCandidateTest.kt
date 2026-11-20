@@ -9,6 +9,7 @@ package io.element.android.call.ui
 
 import com.google.common.truth.Truth.assertThat
 import io.element.android.call.api.ElementCallConnection
+import io.element.android.call.api.rtc.MatrixRtcRingPhase
 import io.element.android.call.api.rtc.MatrixRtcTileId
 import io.element.android.call.api.rtc.MatrixRtcTileKind
 import io.element.android.call.api.rtc.id.UserId
@@ -90,7 +91,10 @@ class PictureInPictureCandidateTest {
     fun `while a DM call rings, the callee without video`() {
         val callee = UserId("@callee:example.org")
         val snapshot = aCallSnapshot(participants = listOf(aCameraParticipant(A_LOCAL_MEMBER_ID, isLocal = true, isCameraMuted = false)))
-            .copy(isCameraEnabled = true, connection = ElementCallConnection.Calling(callee, isRinging = true))
+            .copy(
+                isCameraEnabled = true,
+                connection = ElementCallConnection.Calling(callee, MatrixRtcRingPhase.Ringing(sentAtMs = 0L, lifetimeMs = 90_000L, eventId = null)),
+            )
 
         val chosen = snapshot.pictureInPictureCandidate(checkNotNull(snapshot.ownTile).id)
 

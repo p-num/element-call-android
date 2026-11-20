@@ -48,6 +48,7 @@ import io.element.android.call.api.ElementCallHandRequestFailure
 import io.element.android.call.api.ElementCallInterruption
 import io.element.android.call.api.rtc.MatrixRtcConnectionLossReason
 import io.element.android.call.api.rtc.MatrixRtcMembershipFormat
+import io.element.android.call.api.rtc.MatrixRtcRingPhase
 import io.element.android.call.api.rtc.MatrixRtcVideoCodec
 import io.element.android.call.api.rtc.id.UserId
 import io.element.android.call.tests.testutils.EventsRecorder
@@ -223,7 +224,7 @@ class ElementCallScreenTest : RobolectricTest() {
         setContent {
             ElementCallScreen(
                 state = anElementCallScreenState(
-                    connection = ElementCallConnection.Calling(callee, isRinging = true),
+                    connection = ElementCallConnection.Calling(callee, MatrixRtcRingPhase.Ringing(sentAtMs = 0L, lifetimeMs = 90_000L, eventId = null)),
                     participants = listOf(aLocalParticipant()),
                     isDm = true,
                     eventSink = events,
