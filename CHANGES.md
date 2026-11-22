@@ -12,6 +12,10 @@ actually read it. The matrix-rust-rtc core's own history is the core's:
 
 ## Unreleased
 
+_Nothing yet._
+
+## 0.1.0-rc.11-letro.1 - 2026-11-22
+
 - Hosts constructing `ElementCallConnection.Calling` pass the `ring` phase. `MatrixRtcRingPhase.Ringing` carries a nullable
   `eventId` alongside its timing. Use rebuilt RTC bindings that supply the event ID.
 - Hosts set `ElementCallData.hasExplicitCallIntent` for incoming answers; it defaults to `isStartingCall`, so generic
@@ -38,6 +42,16 @@ actually read it. The matrix-rust-rtc core's own history is the core's:
   stack's scope, or the call's end is not reported.
 - `ElementCallFailure.JoinRefused` is a class carrying the homeserver's `errcode`: a host matching it by value matches by
   type. `MatrixRtcJoinException` gains `SlotClosed`, for a host with its own RTC client.
+
+
+
+### What's Changed
+
+⚠️ API Changes
+* Release native call 0.1.0-rc.10-letro.1 by @ehsunahmadi in https://github.com/p-num/element-call-android/pull/4
+
+
+**Full Changelog**: https://github.com/p-num/element-call-android/compare/v0.1.0-rc.10-letro.1...v0.1.0-rc.11-letro.1
 
 ## 0.1.1 - 2026-11-12
 
